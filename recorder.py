@@ -52,6 +52,9 @@ class Recorder:
         self._current_file = self._generate_filename()
         self._start_time = datetime.now()
 
+        # Set recording flag before starting thread to avoid race condition
+        self._is_recording = True
+
         # Start recording in a separate thread
         self._thread = threading.Thread(target=self._recording_loop, daemon=True)
         self._thread.start()
@@ -87,7 +90,6 @@ class Recorder:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            self._is_recording = True
 
             # Wait for stop event
             while not self._stop_event.is_set():
