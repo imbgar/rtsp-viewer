@@ -1,0 +1,28 @@
+# RTSP Camera Configuration
+# Add your cameras below
+
+cameras:
+  - name: "RoadView"
+    address: "192.168.1.40"
+    port: 554
+    username: "ferretcam"
+    password: "escape"
+    # Optional: specify the RTSP path (default: empty)
+    # Common paths: /stream1, /h264, /live/ch0, /cam/realmonitor
+    path: ""
+
+# Example with multiple cameras (for future use):
+# cameras:
+#   - name: "Front Door"
+#     address: "192.168.1.100"
+#     port: 554
+#     username: "admin"
+#     password: "admin123"
+#     path: "/stream1"
+#
+#   - name: "Backyard"
+#     address: "192.168.1.101"
+#     port: 554
+#     username: "admin"
+#     password: "admin123"
+#     path: "/h264"
