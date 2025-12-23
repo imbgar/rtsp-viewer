@@ -17,6 +17,7 @@ class CameraConfig:
     username: str
     password: str
     path: str = ""
+    low_latency: bool = False  # Enable low-latency optimizations (buffer draining, etc.)
 
     @property
     def rtsp_url(self) -> str:
@@ -63,6 +64,7 @@ def load_cameras(config_path: str | Path = "cameras.yaml") -> list[CameraConfig]
             username=cam_data.get("username", ""),
             password=cam_data.get("password", ""),
             path=cam_data.get("path", ""),
+            low_latency=cam_data.get("low_latency", False),
         )
         cameras.append(camera)
 

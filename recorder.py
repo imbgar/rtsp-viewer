@@ -105,24 +105,39 @@ class Recorder:
 
     def _graceful_stop(self) -> None:
         """Gracefully stop ffmpeg to ensure file is properly finalized."""
-        if self._process is not None:
-            # Send 'q' to ffmpeg for graceful shutdown
-            try:
-                self._process.stdin.write(b"q")
-                self._process.stdin.flush()
-            except (BrokenPipeError, OSError):
-                pass
+        if self._process is None:
+            return
 
+        proc = self._process
+        self._process = None
+
+        # Send 'q' to ffmpeg for graceful shutdown
+        try:
+            if proc.stdin is not None:
+                proc.stdin.write(b"q")
+                proc.stdin.flush()
+                proc.stdin.close()
+        except (BrokenPipeError, OSError, ValueError):
+            # Process already terminated or pipe closed
+            pass
+
+        # Wait for process to finish
+        try:
+            proc.wait(timeout=5.0)
+        except subprocess.TimeoutExpired:
             try:
-                self._process.wait(timeout=5.0)
+                proc.terminate()
+                proc.wait(timeout=2.0)
             except subprocess.TimeoutExpired:
-                self._process.terminate()
                 try:
-                    self._process.wait(timeout=2.0)
-                except subprocess.TimeoutExpired:
-                    self._process.kill()
-
-            self._process = None
+                    proc.kill()
+                    proc.wait(timeout=1.0)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+        except Exception:
+            pass
 
     def stop(self) -> Path | None:
         """Stop recording and return the path to the recorded file."""

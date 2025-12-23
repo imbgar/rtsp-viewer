@@ -10,6 +10,19 @@ cameras:
     # Optional: specify the RTSP path (default: empty)
     # Common paths: /stream1, /h264, /live/ch0, /cam/realmonitor
     path: "/live"
+    # Enable low-latency optimizations (buffer draining, frame dropping)
+    # Use for real-time viewing; disable for smoother playback
+    low_latency: false
+  - name: "iPhone"
+    address: "192.168.1.22"
+    port: 8554
+    username: "roadview"
+    password: "1234"
+    # Optional: specify the RTSP path (default: empty)
+    # Common paths: /stream1, /h264, /live/ch0, /cam/realmonitor
+    path: "/live.sdp"
+    low_latency: false
+
 
 # Example with multiple cameras (for future use):
 # cameras:

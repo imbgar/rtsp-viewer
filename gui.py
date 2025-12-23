@@ -355,13 +355,14 @@ class ViewerGUI:
         self.info_label.config(
             text=f"{info.width}x{info.height} @ {info.fps:.1f}fps ({info.codec})"
         )
-        self.fps_label.config(text=f"FPS: {fps:.1f}")
+        latency_str = f" | {info.latency_ms:.0f}ms" if info.latency_ms > 0 else ""
+        self.fps_label.config(text=f"FPS: {fps:.1f}{latency_str}")
 
         # Schedule next update (~30 fps for display)
         self.root.after(33, self._update_video_frame)
 
     def _display_frame(self, frame: np.ndarray) -> None:
-        """Display a frame on the canvas."""
+        """Display a frame on the canvas with optimized processing."""
         # Get canvas dimensions
         canvas_width = self.video_canvas.winfo_width()
         canvas_height = self.video_canvas.winfo_height()
@@ -382,8 +383,21 @@ class ViewerGUI:
             display_height = canvas_height
             display_width = int(canvas_height * frame_aspect)
 
-        # Resize frame
-        resized = cv2.resize(frame, (display_width, display_height))
+        # Resize frame using INTER_LINEAR for good balance of speed and quality
+        # INTER_NEAREST: fastest, blocky
+        # INTER_LINEAR: fast, smooth (good default)
+        # INTER_AREA: best for downscaling
+        # INTER_LANCZOS4: highest quality, slowest
+        if display_width < frame_width:
+            # Downscaling - use INTER_AREA for best quality
+            resized = cv2.resize(
+                frame, (display_width, display_height), interpolation=cv2.INTER_AREA
+            )
+        else:
+            # Upscaling - use INTER_LINEAR for speed
+            resized = cv2.resize(
+                frame, (display_width, display_height), interpolation=cv2.INTER_LINEAR
+            )
 
         # Convert BGR to RGB
         rgb_frame = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)

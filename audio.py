@@ -41,15 +41,29 @@ class AudioPlayer:
 
     def _playback_loop(self) -> None:
         """Run ffplay for audio playback."""
+        # Audio playback with proper buffering and sync
+        # The garbled/static audio is often caused by:
+        # 1. Buffer underruns - need adequate buffer
+        # 2. Sample rate mismatches
+        # 3. Sync issues between audio/video streams
         cmd = [
             "ffplay",
             "-nodisp",  # No video display (audio only)
             "-vn",  # Disable video
             "-autoexit",  # Exit when stream ends
-            "-loglevel",
-            "quiet",  # Suppress output
-            "-i",
-            self.camera.rtsp_url,
+            "-loglevel", "quiet",
+            # RTSP transport - TCP is more reliable
+            "-rtsp_transport", "tcp",
+            # Audio sync and buffering options
+            "-sync", "audio",  # Sync to audio clock
+            "-framedrop",  # Drop frames if behind
+            # Increase buffer for smoother audio
+            "-probesize", "32768",
+            "-analyzeduration", "1000000",  # 1 second analyze
+            "-fflags", "nobuffer+fastseek",
+            "-flags", "low_delay",
+            "-af", "aresample=async=1000",  # Resample to handle drift
+            "-i", self.camera.rtsp_url,
         ]
 
         try:
@@ -71,25 +85,29 @@ class AudioPlayer:
             print(f"Audio playback error: {e}")
         finally:
             self._is_playing = False
-            if self._process is not None:
+            self._stop_process()
+
+    def _stop_process(self) -> None:
+        """Safely stop the ffplay process."""
+        if self._process is not None:
+            try:
                 self._process.terminate()
+                self._process.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                self._process.kill()
                 try:
-                    self._process.wait(timeout=2.0)
+                    self._process.wait(timeout=1.0)
                 except subprocess.TimeoutExpired:
-                    self._process.kill()
+                    pass
+            except Exception:
+                pass
+            finally:
                 self._process = None
 
     def stop(self) -> None:
         """Stop audio playback."""
         self._stop_event.set()
-
-        if self._process is not None:
-            self._process.terminate()
-            try:
-                self._process.wait(timeout=2.0)
-            except subprocess.TimeoutExpired:
-                self._process.kill()
-            self._process = None
+        self._stop_process()
 
         if self._thread is not None:
             self._thread.join(timeout=2.0)
