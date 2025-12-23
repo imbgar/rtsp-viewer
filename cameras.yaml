@@ -9,7 +9,7 @@ cameras:
     password: "escape"
     # Optional: specify the RTSP path (default: empty)
     # Common paths: /stream1, /h264, /live/ch0, /cam/realmonitor
-    path: ""
+    path: "/live"
 
 # Example with multiple cameras (for future use):
 # cameras:
