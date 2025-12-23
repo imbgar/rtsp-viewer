@@ -65,19 +65,18 @@ class Recorder:
 
         # ffmpeg command for highest quality recording
         # -rtsp_transport tcp: Use TCP for more reliable streaming
-        # -c copy: Copy streams without re-encoding (preserves original quality)
+        # -c:v copy: Copy video without re-encoding (preserves original quality)
+        # -c:a aac: Re-encode audio to AAC (pcm_alaw from some cameras isn't MP4 compatible)
         # -movflags +faststart: Optimize for web playback
         cmd = [
             "ffmpeg",
             "-y",  # Overwrite output file
-            "-rtsp_transport",
-            "tcp",  # Use TCP transport
-            "-i",
-            self.camera.rtsp_url,
-            "-c",
-            "copy",  # Copy streams without re-encoding
-            "-movflags",
-            "+faststart",  # Optimize for streaming
+            "-rtsp_transport", "tcp",  # Use TCP transport
+            "-i", self.camera.rtsp_url,
+            "-c:v", "copy",  # Copy video without re-encoding
+            "-c:a", "aac",  # Re-encode audio to AAC (compatible with MP4)
+            "-b:a", "128k",  # Audio bitrate
+            "-movflags", "+faststart",  # Optimize for streaming
             str(self._current_file),
         ]
 
