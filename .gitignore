@@ -8,3 +8,9 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Ignore recordings
+/recordings
+
+# Other
+.DS_Store
