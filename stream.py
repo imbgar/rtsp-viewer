@@ -10,6 +10,9 @@ import cv2
 import numpy as np
 
 from config import CameraConfig
+from logger import get_logger
+
+log = get_logger("stream")
 
 
 @dataclass
@@ -65,6 +68,18 @@ class RTSPStreamHandler:
         """Get count of dropped frames."""
         return self._dropped_frames
 
+    def set_status_callback(self, callback: Callable[[str], None] | None) -> None:
+        """Set a callback to receive status updates (connecting, reconnecting, etc.)."""
+        self._status_callback = callback
+
+    def _notify_status(self, status: str) -> None:
+        """Notify status callback if set."""
+        if self._status_callback:
+            try:
+                self._status_callback(status)
+            except Exception:
+                pass
+
     def add_frame_callback(self, callback: Callable[[np.ndarray], None]) -> None:
         """Add a callback to be called when a new frame is available."""
         self._frame_callbacks.append(callback)
@@ -99,44 +114,46 @@ class RTSPStreamHandler:
 
         self._stream_info.is_connected = True
 
-    def start(self, use_tcp: bool = True) -> bool:
-        """
-        Start the stream capture.
+    def _connect(self) -> bool:
+        """Establish connection to the RTSP stream."""
+        log.info(f"Connecting to {self.camera.name} at {self.camera.address}:{self.camera.port}")
 
-        Args:
-            use_tcp: Use TCP transport (more reliable, slightly higher latency)
-        """
-        if self._thread is not None and self._thread.is_alive():
-            return True
-
-        self._stop_event.clear()
-        self._dropped_frames = 0
-        self._total_frames = 0
+        # Release existing capture if any
+        if self._cap is not None:
+            self._cap.release()
+            self._cap = None
 
         # Check if low_latency is enabled in camera config
         low_latency = self.camera.low_latency
 
-        # Set FFmpeg options via environment for low latency
-        # These affect how FFmpeg (used by OpenCV) handles the stream
+        # Set FFmpeg options via environment
+        # Always use TCP for reliability (UDP can drop packets)
         if low_latency:
+            log.debug("Using low-latency mode")
             os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
-                "rtsp_transport;tcp|"  # TCP for reliability
-                "fflags;nobuffer|"  # Disable buffering
-                "flags;low_delay|"  # Low delay mode
-                "framedrop;1|"  # Allow frame dropping
+                "rtsp_transport;tcp|"
+                "fflags;nobuffer|"
+                "flags;low_delay|"
+                "framedrop;1|"
                 "strict;experimental|"
-                "avioflags;direct|"  # Direct I/O
-                "fflags;discardcorrupt|"  # Discard corrupt frames
-                "analyzeduration;500000|"  # Reduce analyze time (500ms)
-                "probesize;500000"  # Reduce probe size
+                "avioflags;direct|"
+                "fflags;discardcorrupt|"
+                "analyzeduration;500000|"
+                "probesize;500000"
             )
-        elif use_tcp:
-            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+        else:
+            log.debug("Using standard mode with TCP")
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+                "rtsp_transport;tcp|"
+                "buffer_size;8192000|"
+                "fflags;discardcorrupt"
+            )
 
         # Create capture with FFmpeg backend
         self._cap = cv2.VideoCapture(self.camera.rtsp_url, cv2.CAP_FFMPEG)
 
         if not self._cap.isOpened():
+            log.error(f"Failed to open stream: {self.camera.name}")
             self._stream_info.is_connected = False
             return False
 
@@ -144,11 +161,61 @@ class RTSPStreamHandler:
         self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         self._detect_stream_info()
+        self._last_frame_time = time.time()
+
+        log.info(
+            f"Connected: {self._stream_info.width}x{self._stream_info.height} "
+            f"@ {self._stream_info.fps:.1f}fps ({self._stream_info.codec})"
+        )
+        return True
+
+    def _reconnect(self) -> bool:
+        """Attempt to reconnect to the stream."""
+        self._reconnect_count += 1
+        log.warning(f"Reconnecting ({self._reconnect_count}/{self.MAX_RECONNECT_ATTEMPTS})...")
+        self._notify_status(f"Reconnecting ({self._reconnect_count}/{self.MAX_RECONNECT_ATTEMPTS})...")
+
+        if self._reconnect_count > self.MAX_RECONNECT_ATTEMPTS:
+            log.error("Connection failed - max retries exceeded")
+            self._notify_status("Connection failed - max retries exceeded")
+            return False
+
+        # Wait before reconnecting
+        time.sleep(self.RECONNECT_DELAY)
+
+        if self._stop_event.is_set():
+            return False
+
+        if self._connect():
+            self._reconnect_count = 0
+            log.info("Reconnected successfully")
+            self._notify_status("Reconnected")
+            return True
+
+        return False
+
+    def start(self) -> bool:
+        """Start the stream capture (always uses TCP for reliability)."""
+        if self._thread is not None and self._thread.is_alive():
+            return True
+
+        self._stop_event.clear()
+        self._dropped_frames = 0
+        self._total_frames = 0
+        self._reconnect_count = 0
+
+        self._notify_status("Connecting...")
+
+        if not self._connect():
+            return False
+
+        self._notify_status("Streaming")
 
         # Start capture thread
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
 
+        log.info("Stream capture thread started")
         return True
 
     def stop(self) -> None:
@@ -171,24 +238,44 @@ class RTSPStreamHandler:
             del os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"]
 
     def _capture_loop(self) -> None:
-        """Main capture loop with optional frame dropping for real-time performance."""
+        """Main capture loop with health checking and auto-reconnect."""
         fps_update_interval = 1.0
         frame_count = 0
         fps_start_time = time.time()
-        low_latency = self.camera.low_latency
+        last_health_check = time.time()
+        consecutive_failures = 0
+        max_consecutive_failures = 30  # ~1 second of failures at 30fps
 
         while not self._stop_event.is_set():
             if self._cap is None or not self._cap.isOpened():
                 self._stream_info.is_connected = False
-                break
+                # Try to reconnect
+                if not self._reconnect():
+                    break
+                consecutive_failures = 0
+                continue
 
-            frame_start = time.time()
+            current_time = time.time()
+            frame_start = current_time
+            low_latency = self.camera.low_latency
+
+            # Health check: verify we're still receiving frames
+            if current_time - last_health_check >= self.HEALTH_CHECK_INTERVAL:
+                last_health_check = current_time
+                time_since_last_frame = current_time - self._last_frame_time
+
+                if time_since_last_frame > self.FRAME_TIMEOUT:
+                    self._notify_status("Stream timeout - reconnecting...")
+                    self._stream_info.is_connected = False
+                    if not self._reconnect():
+                        break
+                    consecutive_failures = 0
+                    continue
 
             if low_latency:
                 # Low-latency mode: grab multiple frames and only decode the latest
-                # This drains the buffer and reduces latency
                 grabbed = False
-                for _ in range(3):  # Try to grab up to 3 frames
+                for _ in range(3):
                     if self._cap.grab():
                         grabbed = True
                         self._total_frames += 1
@@ -196,10 +283,17 @@ class RTSPStreamHandler:
                         break
 
                 if not grabbed:
-                    time.sleep(0.01)
+                    consecutive_failures += 1
+                    if consecutive_failures >= max_consecutive_failures:
+                        self._notify_status("Stream stalled - reconnecting...")
+                        self._stream_info.is_connected = False
+                        if not self._reconnect():
+                            break
+                        consecutive_failures = 0
+                    else:
+                        time.sleep(0.01)
                     continue
 
-                # Only decode the last grabbed frame
                 ret, frame = self._cap.retrieve()
             else:
                 # Standard mode: read frames normally without dropping
@@ -208,10 +302,20 @@ class RTSPStreamHandler:
 
             if not ret or frame is None:
                 self._dropped_frames += 1
+                consecutive_failures += 1
+                if consecutive_failures >= max_consecutive_failures:
+                    self._notify_status("Stream stalled - reconnecting...")
+                    self._stream_info.is_connected = False
+                    if not self._reconnect():
+                        break
+                    consecutive_failures = 0
                 continue
 
+            # Reset failure counter on successful frame
+            consecutive_failures = 0
             current_time = time.time()
             decode_time = current_time - frame_start
+            self._last_frame_time = current_time
 
             # Update FPS calculation
             frame_count += 1

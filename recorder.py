@@ -8,6 +8,9 @@ from datetime import datetime
 from pathlib import Path
 
 from config import CameraConfig
+from logger import get_logger
+
+log = get_logger("recorder")
 
 # Default segment duration in seconds (30 minutes)
 DEFAULT_SEGMENT_DURATION = 30 * 60
@@ -125,47 +128,75 @@ class Recorder:
 
     def _recording_loop(self) -> None:
         """Run ffmpeg for recording with segment rotation."""
+        log.info(f"Recording started for camera: {self.camera.name}")
+        log.info(f"Session directory: {self._session_dir}")
+        log.info(f"Segment duration: {self.segment_duration}s")
+
+        segment_number = 0
+        consecutive_failures = 0
+        max_consecutive_failures = 5
+        retry_delay = 5.0  # seconds between retries
+
         while not self._stop_event.is_set() and self._is_recording:
-            # Generate new filename for this segment
+            segment_number += 1
             self._current_file = self._generate_filename()
             self._segment_start_time = datetime.now()
 
+            log.info(f"Starting segment {segment_number}: {self._current_file.name}")
+
             cmd = self._build_ffmpeg_command(self._current_file)
+            log.debug(f"FFmpeg command: {' '.join(cmd)}")
+
+            stderr_lines: list[str] = []
 
             try:
                 self._process = subprocess.Popen(
                     cmd,
                     stdin=subprocess.PIPE,
                     stdout=subprocess.DEVNULL,
-                    stderr=subprocess.PIPE,  # Capture stderr to prevent blocking
+                    stderr=subprocess.PIPE,
                 )
 
-                # Drain stderr in background to prevent buffer blocking
-                def drain_stderr(proc):
+                # Drain stderr in background and collect output for debugging
+                def drain_stderr(proc: subprocess.Popen, lines: list[str]) -> None:
                     try:
-                        while proc.stderr:
-                            line = proc.stderr.readline()
-                            if not line:
-                                break
+                        if proc.stderr:
+                            for line in proc.stderr:
+                                decoded = line.decode("utf-8", errors="replace").strip()
+                                if decoded:
+                                    lines.append(decoded)
                     except Exception:
                         pass
 
                 stderr_thread = threading.Thread(
-                    target=drain_stderr, args=(self._process,), daemon=True
+                    target=drain_stderr,
+                    args=(self._process, stderr_lines),
+                    daemon=True,
                 )
                 stderr_thread.start()
 
                 # Wait for segment duration or stop event
                 segment_start = time.time()
+                segment_failed = False
+
                 while not self._stop_event.is_set():
-                    if self._process.poll() is not None:
-                        # Process ended unexpectedly
+                    exit_code = self._process.poll()
+                    if exit_code is not None:
+                        # Process ended - check if it was an error
+                        elapsed = time.time() - segment_start
+                        if exit_code != 0 or elapsed < 5.0:
+                            # Failed or exited too quickly
+                            log.error(f"FFmpeg exited with code {exit_code} after {elapsed:.1f}s")
+                            stderr_thread.join(timeout=1.0)
+                            for line in stderr_lines[-10:]:
+                                log.error(f"  ffmpeg: {line}")
+                            segment_failed = True
                         break
 
                     # Check if segment duration reached
                     elapsed = time.time() - segment_start
                     if elapsed >= self.segment_duration:
-                        # Time to rotate to a new segment
+                        log.info(f"Segment {segment_number} reached duration limit, rotating...")
                         break
 
                     self._stop_event.wait(0.5)
@@ -173,16 +204,51 @@ class Recorder:
                 # Gracefully stop current segment
                 self._graceful_stop()
 
+                # Wait for stderr thread to finish
+                stderr_thread.join(timeout=2.0)
+
+                # Handle segment failure with retry logic
+                if segment_failed:
+                    consecutive_failures += 1
+                    log.warning(
+                        f"Segment failed ({consecutive_failures}/{max_consecutive_failures})"
+                    )
+
+                    if consecutive_failures >= max_consecutive_failures:
+                        log.error("Too many consecutive failures, stopping recording")
+                        break
+
+                    # Wait before retrying
+                    log.info(f"Waiting {retry_delay}s before retry...")
+                    if self._stop_event.wait(retry_delay):
+                        break  # Stop event was set
+                    continue  # Try again without incrementing segment number
+
+                # Reset failure counter on success
+                consecutive_failures = 0
+
                 # Track recorded file if it exists and has content
                 if self._current_file and self._current_file.exists():
-                    if self._current_file.stat().st_size > 0:
+                    file_size = self._current_file.stat().st_size
+                    if file_size > 0:
                         self._recorded_files.append(self._current_file)
+                        log.info(f"Segment {segment_number} saved: {file_size / 1024 / 1024:.2f} MB")
+                    else:
+                        log.warning(f"Segment {segment_number} is empty (0 bytes)")
+                else:
+                    log.warning(f"Segment {segment_number} file not found")
 
             except Exception as e:
-                print(f"Recording error: {e}")
-                break
+                log.exception(f"Recording error: {e}")
+                consecutive_failures += 1
+                if consecutive_failures >= max_consecutive_failures:
+                    break
+                log.info(f"Waiting {retry_delay}s before retry...")
+                if self._stop_event.wait(retry_delay):
+                    break
 
         self._is_recording = False
+        log.info(f"Recording stopped. Total segments: {len(self._recorded_files)}")
 
     def _graceful_stop(self) -> None:
         """Gracefully stop ffmpeg to ensure file is properly finalized."""
@@ -192,33 +258,43 @@ class Recorder:
         proc = self._process
         self._process = None
 
+        # Check if process is already dead
+        if proc.poll() is not None:
+            log.debug(f"FFmpeg already exited with code {proc.returncode}")
+            return
+
         # Send 'q' to ffmpeg for graceful shutdown
+        log.debug("Sending 'q' to ffmpeg for graceful shutdown...")
         try:
-            if proc.stdin is not None:
+            if proc.stdin is not None and not proc.stdin.closed:
                 proc.stdin.write(b"q")
                 proc.stdin.flush()
                 proc.stdin.close()
-        except (BrokenPipeError, OSError, ValueError):
-            # Process already terminated or pipe closed
-            pass
+        except (BrokenPipeError, OSError, ValueError) as e:
+            log.debug(f"Could not send quit signal (process may have exited): {e}")
 
         # Wait for process to finish
         try:
             proc.wait(timeout=5.0)
+            log.debug(f"FFmpeg exited gracefully with code {proc.returncode}")
         except subprocess.TimeoutExpired:
+            log.warning("FFmpeg did not respond to quit, sending SIGTERM...")
             try:
                 proc.terminate()
                 proc.wait(timeout=2.0)
+                log.debug("FFmpeg terminated")
             except subprocess.TimeoutExpired:
+                log.warning("FFmpeg did not respond to SIGTERM, sending SIGKILL...")
                 try:
                     proc.kill()
                     proc.wait(timeout=1.0)
-                except Exception:
-                    pass
-            except Exception:
-                pass
-        except Exception:
-            pass
+                    log.debug("FFmpeg killed")
+                except Exception as e:
+                    log.error(f"Failed to kill ffmpeg: {e}")
+            except Exception as e:
+                log.error(f"Error terminating ffmpeg: {e}")
+        except Exception as e:
+            log.error(f"Error waiting for ffmpeg: {e}")
 
     def stop(self) -> Path | None:
         """Stop recording and return the path to the session directory."""
