@@ -130,12 +130,23 @@ class ViewerGUI:
         self.stop_record_btn.pack(side=tk.LEFT, padx=5)
         self.stop_record_btn.state(["disabled"])
 
-        # Audio toggle
-        self.audio_var = tk.BooleanVar(value=True)
-        self.audio_check = ttk.Checkbutton(
-            button_frame, text="Audio", variable=self.audio_var, command=self._on_audio_toggle
+        # Separator
+        ttk.Separator(button_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
+
+        # Audio Preview toggle (live audio playback)
+        self.audio_preview_var = tk.BooleanVar(value=True)
+        self.audio_preview_check = ttk.Checkbutton(
+            button_frame, text="Audio Preview", variable=self.audio_preview_var,
+            command=self._on_audio_preview_toggle
         )
-        self.audio_check.pack(side=tk.LEFT, padx=15)
+        self.audio_preview_check.pack(side=tk.LEFT, padx=5)
+
+        # Record Audio toggle (include audio in recording)
+        self.record_audio_var = tk.BooleanVar(value=True)
+        self.record_audio_check = ttk.Checkbutton(
+            button_frame, text="Record Audio", variable=self.record_audio_var
+        )
+        self.record_audio_check.pack(side=tk.LEFT, padx=5)
 
     def _setup_status_bar(self) -> None:
         """Set up the status bar at the bottom."""
@@ -201,10 +212,9 @@ class ViewerGUI:
         try:
             self.viewer.reload_config()
             self._update_camera_list()
-            self._update_status("Configuration reloaded")
-            messagebox.showinfo("Success", "Camera configuration reloaded successfully.")
+            self._update_status("Configuration reloaded successfully")
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to reload configuration:\n{e}")
+            self._update_status(f"Config reload failed: {e}")
 
     def _on_play(self) -> None:
         """Handle play button click."""
@@ -218,7 +228,7 @@ class ViewerGUI:
         # Start stream in background
         def start_stream():
             success = self.viewer.start_stream(
-                enable_audio=self.audio_var.get()
+                enable_audio=self.audio_preview_var.get()
             )
             self.root.after(0, lambda: self._on_stream_started(success))
 
@@ -250,7 +260,7 @@ class ViewerGUI:
             messagebox.showwarning("Warning", "Start streaming before recording.")
             return
 
-        success = self.viewer.start_recording()
+        success = self.viewer.start_recording(record_audio=self.record_audio_var.get())
         if success:
             self._update_button_states()
             self._update_status("Recording")
@@ -268,10 +278,10 @@ class ViewerGUI:
         if recorded_file:
             messagebox.showinfo("Recording Saved", f"Recording saved to:\n{recorded_file}")
 
-    def _on_audio_toggle(self) -> None:
-        """Handle audio checkbox toggle."""
+    def _on_audio_preview_toggle(self) -> None:
+        """Handle audio preview checkbox toggle."""
         if self.viewer.is_streaming():
-            if self.audio_var.get():
+            if self.audio_preview_var.get():
                 self.viewer.enable_audio()
             else:
                 self.viewer.disable_audio()

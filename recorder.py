@@ -3,24 +3,37 @@
 import shutil
 import subprocess
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
 from config import CameraConfig
 
+# Default segment duration in seconds (30 minutes)
+DEFAULT_SEGMENT_DURATION = 30 * 60
+
 
 class Recorder:
     """Records RTSP streams using ffmpeg at the highest available quality."""
 
-    def __init__(self, camera: CameraConfig, output_dir: str | Path = "recordings"):
+    def __init__(
+        self,
+        camera: CameraConfig,
+        output_dir: str | Path = "recordings",
+        segment_duration: int = DEFAULT_SEGMENT_DURATION,
+    ):
         self.camera = camera
         self.output_dir = Path(output_dir)
+        self.segment_duration = segment_duration
         self._process: subprocess.Popen | None = None
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._is_recording = False
         self._current_file: Path | None = None
         self._start_time: datetime | None = None
+        self._segment_start_time: datetime | None = None
+        self._record_audio = True
+        self._recorded_files: list[Path] = []
 
     @staticmethod
     def is_available() -> bool:
@@ -39,7 +52,7 @@ class Recorder:
 
         return self.output_dir / filename
 
-    def start(self) -> bool:
+    def start(self, record_audio: bool = True) -> bool:
         """Start recording the stream."""
         if not self.is_available():
             print("Error: ffmpeg not found. Recording disabled.")
@@ -49,8 +62,9 @@ class Recorder:
             return True
 
         self._stop_event.clear()
-        self._current_file = self._generate_filename()
+        self._record_audio = record_audio
         self._start_time = datetime.now()
+        self._recorded_files = []
 
         # Set recording flag before starting thread to avoid race condition
         self._is_recording = True
@@ -61,48 +75,75 @@ class Recorder:
 
         return True
 
-    def _recording_loop(self) -> None:
-        """Run ffmpeg for recording."""
-        if self._current_file is None:
-            return
-
-        # ffmpeg command for highest quality recording
-        # -rtsp_transport tcp: Use TCP for more reliable streaming
-        # -c:v copy: Copy video without re-encoding (preserves original quality)
-        # -c:a aac: Re-encode audio to AAC (pcm_alaw from some cameras isn't MP4 compatible)
-        # -movflags +faststart: Optimize for web playback
+    def _build_ffmpeg_command(self, output_file: Path) -> list[str]:
+        """Build the ffmpeg command for recording."""
         cmd = [
             "ffmpeg",
             "-y",  # Overwrite output file
             "-rtsp_transport", "tcp",  # Use TCP transport
             "-i", self.camera.rtsp_url,
             "-c:v", "copy",  # Copy video without re-encoding
-            "-c:a", "aac",  # Re-encode audio to AAC (compatible with MP4)
-            "-b:a", "128k",  # Audio bitrate
-            "-movflags", "+faststart",  # Optimize for streaming
-            str(self._current_file),
         ]
 
-        try:
-            self._process = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+        if self._record_audio:
+            # Re-encode audio to AAC (pcm_alaw/mulaw from some cameras isn't MP4 compatible)
+            cmd.extend(["-c:a", "aac", "-b:a", "128k"])
+        else:
+            # No audio
+            cmd.extend(["-an"])
 
-            # Wait for stop event
-            while not self._stop_event.is_set():
-                if self._process.poll() is not None:
-                    # Process ended unexpectedly
-                    break
-                self._stop_event.wait(0.1)
+        cmd.extend([
+            "-movflags", "+faststart",  # Optimize for streaming
+            str(output_file),
+        ])
 
-        except Exception as e:
-            print(f"Recording error: {e}")
-        finally:
-            self._is_recording = False
-            self._graceful_stop()
+        return cmd
+
+    def _recording_loop(self) -> None:
+        """Run ffmpeg for recording with segment rotation."""
+        while not self._stop_event.is_set() and self._is_recording:
+            # Generate new filename for this segment
+            self._current_file = self._generate_filename()
+            self._segment_start_time = datetime.now()
+
+            cmd = self._build_ffmpeg_command(self._current_file)
+
+            try:
+                self._process = subprocess.Popen(
+                    cmd,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+
+                # Wait for segment duration or stop event
+                segment_start = time.time()
+                while not self._stop_event.is_set():
+                    if self._process.poll() is not None:
+                        # Process ended unexpectedly
+                        break
+
+                    # Check if segment duration reached
+                    elapsed = time.time() - segment_start
+                    if elapsed >= self.segment_duration:
+                        # Time to rotate to a new segment
+                        break
+
+                    self._stop_event.wait(0.5)
+
+                # Gracefully stop current segment
+                self._graceful_stop()
+
+                # Track recorded file if it exists and has content
+                if self._current_file and self._current_file.exists():
+                    if self._current_file.stat().st_size > 0:
+                        self._recorded_files.append(self._current_file)
+
+            except Exception as e:
+                print(f"Recording error: {e}")
+                break
+
+        self._is_recording = False
 
     def _graceful_stop(self) -> None:
         """Gracefully stop ffmpeg to ensure file is properly finalized."""
@@ -141,7 +182,7 @@ class Recorder:
             pass
 
     def stop(self) -> Path | None:
-        """Stop recording and return the path to the recorded file."""
+        """Stop recording and return the path to the last recorded file."""
         self._stop_event.set()
 
         if self._thread is not None:
@@ -149,11 +190,22 @@ class Recorder:
             self._thread = None
 
         self._is_recording = False
-        recorded_file = self._current_file
+
+        # Return the last recorded file
+        last_file = self._current_file
+        if last_file and last_file.exists() and last_file.stat().st_size > 0:
+            if last_file not in self._recorded_files:
+                self._recorded_files.append(last_file)
+
         self._current_file = None
         self._start_time = None
+        self._segment_start_time = None
 
-        return recorded_file
+        return last_file
+
+    def get_recorded_files(self) -> list[Path]:
+        """Get list of all recorded files from this session."""
+        return self._recorded_files.copy()
 
     def is_recording(self) -> bool:
         """Check if currently recording."""
@@ -164,10 +216,16 @@ class Recorder:
         return self._current_file
 
     def get_recording_duration(self) -> float:
-        """Get the duration of the current recording in seconds."""
+        """Get the total duration of the current recording session in seconds."""
         if self._start_time is None:
             return 0.0
         return (datetime.now() - self._start_time).total_seconds()
+
+    def get_segment_duration(self) -> float:
+        """Get the duration of the current segment in seconds."""
+        if self._segment_start_time is None:
+            return 0.0
+        return (datetime.now() - self._segment_start_time).total_seconds()
 
 
 class StreamProbe:
@@ -185,14 +243,11 @@ class StreamProbe:
 
         cmd = [
             "ffprobe",
-            "-v",
-            "quiet",
-            "-print_format",
-            "json",
+            "-v", "quiet",
+            "-print_format", "json",
             "-show_streams",
             "-show_format",
-            "-rtsp_transport",
-            "tcp",
+            "-rtsp_transport", "tcp",
             rtsp_url,
         ]
 

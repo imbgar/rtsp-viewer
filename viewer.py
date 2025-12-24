@@ -134,7 +134,7 @@ class RTSPViewer:
         if self._audio_player is not None:
             self._audio_player.stop()
 
-    def start_recording(self) -> bool:
+    def start_recording(self, record_audio: bool = True) -> bool:
         """Start recording the current stream."""
         if not self.is_streaming():
             return False
@@ -145,7 +145,7 @@ class RTSPViewer:
                 return False
             self._recorder = Recorder(camera)
 
-        return self._recorder.start()
+        return self._recorder.start(record_audio=record_audio)
 
     def stop_recording(self) -> Path | None:
         """Stop recording and return the path to the recorded file."""
