@@ -98,17 +98,20 @@ class Recorder:
         cmd = [
             "ffmpeg",
             "-y",  # Overwrite output file
+            "-fflags", "+genpts+discardcorrupt",  # Generate PTS and discard corrupt frames
             "-rtsp_transport", "tcp",  # Use TCP transport
-            "-buffer_size", "4096000",  # 4MB buffer for high-bitrate streams
+            "-buffer_size", "8192000",  # 8MB buffer for high-bitrate 2K streams
+            "-max_delay", "500000",  # 500ms max delay
             "-probesize", "10000000",  # 10MB probe size for faster stream analysis
             "-analyzeduration", "10000000",  # 10 seconds analysis duration
             "-i", self.camera.rtsp_url,
             "-c:v", "copy",  # Copy video without re-encoding
+            "-fps_mode", "passthrough",  # Preserve original timestamps
         ]
 
         if self._record_audio:
             # Re-encode audio to AAC (pcm_alaw/mulaw from some cameras isn't MP4 compatible)
-            cmd.extend(["-c:a", "aac", "-b:a", "128k"])
+            cmd.extend(["-c:a", "aac", "-b:a", "128k", "-async", "1"])
         else:
             # No audio
             cmd.extend(["-an"])
