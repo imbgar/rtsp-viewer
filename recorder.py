@@ -98,26 +98,26 @@ class Recorder:
         cmd = [
             "ffmpeg",
             "-y",  # Overwrite output file
+            "-use_wallclock_as_timestamps", "1",  # Use system clock for timestamps
             "-fflags", "+genpts+discardcorrupt",  # Generate PTS and discard corrupt frames
             "-rtsp_transport", "tcp",  # Use TCP transport
             "-buffer_size", "8192000",  # 8MB buffer for high-bitrate 2K streams
-            "-max_delay", "500000",  # 500ms max delay
             "-probesize", "10000000",  # 10MB probe size for faster stream analysis
             "-analyzeduration", "10000000",  # 10 seconds analysis duration
             "-i", self.camera.rtsp_url,
             "-c:v", "copy",  # Copy video without re-encoding
-            "-fps_mode", "passthrough",  # Preserve original timestamps
+            "-reset_timestamps", "1",  # Reset timestamps at start
         ]
 
         if self._record_audio:
             # Re-encode audio to AAC (pcm_alaw/mulaw from some cameras isn't MP4 compatible)
-            cmd.extend(["-c:a", "aac", "-b:a", "128k", "-async", "1"])
+            cmd.extend(["-c:a", "aac", "-b:a", "128k"])
         else:
             # No audio
             cmd.extend(["-an"])
 
         cmd.extend([
-            "-movflags", "+faststart",  # Optimize for streaming
+            "-movflags", "+frag_keyframe+empty_moov+default_base_moof",  # Fragmented MP4 - writes moov at start, survives crashes
             str(output_file),
         ])
 
@@ -137,8 +137,23 @@ class Recorder:
                     cmd,
                     stdin=subprocess.PIPE,
                     stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,  # Capture stderr to prevent blocking
                 )
+
+                # Drain stderr in background to prevent buffer blocking
+                def drain_stderr(proc):
+                    try:
+                        while proc.stderr:
+                            line = proc.stderr.readline()
+                            if not line:
+                                break
+                    except Exception:
+                        pass
+
+                stderr_thread = threading.Thread(
+                    target=drain_stderr, args=(self._process,), daemon=True
+                )
+                stderr_thread.start()
 
                 # Wait for segment duration or stop event
                 segment_start = time.time()

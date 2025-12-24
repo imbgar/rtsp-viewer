@@ -27,6 +27,12 @@ class StreamInfo:
 class RTSPStreamHandler:
     """Handles RTSP stream capture using OpenCV with low-latency optimizations."""
 
+    # Health check settings
+    HEALTH_CHECK_INTERVAL = 5.0  # Check every 5 seconds
+    FRAME_TIMEOUT = 10.0  # Consider stream dead if no frame for 10 seconds
+    MAX_RECONNECT_ATTEMPTS = 5
+    RECONNECT_DELAY = 2.0  # Seconds between reconnect attempts
+
     def __init__(self, camera: CameraConfig):
         self.camera = camera
         self._cap: cv2.VideoCapture | None = None
@@ -40,6 +46,9 @@ class RTSPStreamHandler:
         self._actual_fps = 0.0
         self._dropped_frames = 0
         self._total_frames = 0
+        self._last_frame_time = 0.0
+        self._reconnect_count = 0
+        self._status_callback: Callable[[str], None] | None = None
 
     @property
     def stream_info(self) -> StreamInfo:
