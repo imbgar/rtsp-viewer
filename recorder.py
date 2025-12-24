@@ -34,15 +34,30 @@ class Recorder:
         self._segment_start_time: datetime | None = None
         self._record_audio = True
         self._recorded_files: list[Path] = []
+        self._session_dir: Path | None = None
 
     @staticmethod
     def is_available() -> bool:
         """Check if ffmpeg is available on the system."""
         return shutil.which("ffmpeg") is not None
 
+    def _create_session_dir(self) -> Path:
+        """Create a session directory for this recording session."""
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_name = "".join(
+            c if c.isalnum() or c in "-_" else "_" for c in self.camera.name
+        )
+        session_dir = self.output_dir / f"{safe_name}_{timestamp}"
+        session_dir.mkdir(parents=True, exist_ok=True)
+
+        return session_dir
+
     def _generate_filename(self) -> Path:
         """Generate a timestamped filename for the recording."""
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        if self._session_dir is None:
+            self._session_dir = self._create_session_dir()
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_name = "".join(
@@ -50,7 +65,7 @@ class Recorder:
         )
         filename = f"{safe_name}_{timestamp}.mp4"
 
-        return self.output_dir / filename
+        return self._session_dir / filename
 
     def start(self, record_audio: bool = True) -> bool:
         """Start recording the stream."""
@@ -65,6 +80,9 @@ class Recorder:
         self._record_audio = record_audio
         self._start_time = datetime.now()
         self._recorded_files = []
+
+        # Create session directory for this recording session
+        self._session_dir = self._create_session_dir()
 
         # Set recording flag before starting thread to avoid race condition
         self._is_recording = True
@@ -81,6 +99,9 @@ class Recorder:
             "ffmpeg",
             "-y",  # Overwrite output file
             "-rtsp_transport", "tcp",  # Use TCP transport
+            "-buffer_size", "4096000",  # 4MB buffer for high-bitrate streams
+            "-probesize", "10000000",  # 10MB probe size for faster stream analysis
+            "-analyzeduration", "10000000",  # 10 seconds analysis duration
             "-i", self.camera.rtsp_url,
             "-c:v", "copy",  # Copy video without re-encoding
         ]
@@ -182,7 +203,7 @@ class Recorder:
             pass
 
     def stop(self) -> Path | None:
-        """Stop recording and return the path to the last recorded file."""
+        """Stop recording and return the path to the session directory."""
         self._stop_event.set()
 
         if self._thread is not None:
@@ -191,17 +212,21 @@ class Recorder:
 
         self._is_recording = False
 
-        # Return the last recorded file
+        # Track the last recorded file
         last_file = self._current_file
         if last_file and last_file.exists() and last_file.stat().st_size > 0:
             if last_file not in self._recorded_files:
                 self._recorded_files.append(last_file)
 
+        # Return the session directory (contains all segment files)
+        session_dir = self._session_dir
+
         self._current_file = None
         self._start_time = None
         self._segment_start_time = None
+        self._session_dir = None
 
-        return last_file
+        return session_dir
 
     def get_recorded_files(self) -> list[Path]:
         """Get list of all recorded files from this session."""
@@ -214,6 +239,10 @@ class Recorder:
     def get_current_file(self) -> Path | None:
         """Get the path to the current recording file."""
         return self._current_file
+
+    def get_session_dir(self) -> Path | None:
+        """Get the path to the current session directory."""
+        return self._session_dir
 
     def get_recording_duration(self) -> float:
         """Get the total duration of the current recording session in seconds."""

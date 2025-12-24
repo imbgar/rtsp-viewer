@@ -270,13 +270,13 @@ class ViewerGUI:
 
     def _on_stop_record(self) -> None:
         """Handle stop recording button click."""
-        recorded_file = self.viewer.stop_recording()
+        session_dir = self.viewer.stop_recording()
         self._update_button_states()
         self._update_status("Streaming")
         self.recording_label.config(text="")
 
-        if recorded_file:
-            messagebox.showinfo("Recording Saved", f"Recording saved to:\n{recorded_file}")
+        if session_dir:
+            messagebox.showinfo("Recording Saved", f"Recording saved to:\n{session_dir}")
 
     def _on_audio_preview_toggle(self) -> None:
         """Handle audio preview checkbox toggle."""
