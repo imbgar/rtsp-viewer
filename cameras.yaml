@@ -22,6 +22,15 @@ cameras:
     # Common paths: /stream1, /h264, /live/ch0, /cam/realmonitor
     path: "/live.sdp"
     low_latency: false
+  - name: "Tapo"
+    address: "192.168.1.143"
+    port: 554
+    username: "roadcamera"
+    password: "roadcam1234!@"
+    # Optional: specify the RTSP path (default: empty)
+    # Common paths: /stream1, /h264, /live/ch0, /cam/realmonitor
+    path: "/stream1"
+    low_latency: false
 
 
 # Example with multiple cameras (for future use):
