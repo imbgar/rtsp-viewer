@@ -1,5 +1,6 @@
 """GUI for RTSP stream viewer using tkinter."""
 
+import queue
 import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -8,6 +9,8 @@ from typing import TYPE_CHECKING
 import cv2
 import numpy as np
 from PIL import Image, ImageTk
+
+from logger import add_gui_handler, remove_gui_handler, GUILogHandler
 
 if TYPE_CHECKING:
     from viewer import RTSPViewer
@@ -27,8 +30,14 @@ class ViewerGUI:
         self._photo: ImageTk.PhotoImage | None = None
         self._update_scheduled = False
 
+        # Console log handling
+        self._log_queue: queue.Queue[str] = queue.Queue()
+        self._log_handler: GUILogHandler | None = None
+        self._console_visible = False
+
         self._setup_ui()
         self._setup_bindings()
+        self._setup_log_handler()
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
@@ -47,6 +56,9 @@ class ViewerGUI:
 
         # Status bar
         self._setup_status_bar()
+
+        # Console panel (initially hidden)
+        self._setup_console_panel()
 
     def _setup_info_bar(self) -> None:
         """Set up the information bar at the top."""
@@ -148,6 +160,15 @@ class ViewerGUI:
         )
         self.record_audio_check.pack(side=tk.LEFT, padx=5)
 
+        # Separator
+        ttk.Separator(button_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
+
+        # Console toggle button
+        self.console_btn = ttk.Button(
+            button_frame, text="Console", command=self._toggle_console, width=10
+        )
+        self.console_btn.pack(side=tk.LEFT, padx=5)
+
     def _setup_status_bar(self) -> None:
         """Set up the status bar at the bottom."""
         status_frame = ttk.Frame(self.main_frame)
@@ -164,6 +185,87 @@ class ViewerGUI:
         # Recording indicator
         self.recording_label = ttk.Label(status_frame, text="", foreground="red")
         self.recording_label.pack(side=tk.RIGHT, padx=10)
+
+    def _setup_console_panel(self) -> None:
+        """Set up the console log panel (initially hidden)."""
+        self.console_frame = ttk.LabelFrame(self.main_frame, text="Console")
+
+        # Text widget with scrollbar
+        console_inner = ttk.Frame(self.console_frame)
+        console_inner.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+
+        self.console_text = tk.Text(
+            console_inner,
+            height=8,
+            wrap=tk.WORD,
+            font=("Consolas", 9),
+            bg="#1e1e1e",
+            fg="#d4d4d4",
+            insertbackground="#d4d4d4",
+            state=tk.DISABLED,
+        )
+
+        console_scrollbar = ttk.Scrollbar(
+            console_inner, orient=tk.VERTICAL, command=self.console_text.yview
+        )
+        self.console_text.configure(yscrollcommand=console_scrollbar.set)
+
+        console_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.console_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Clear button
+        clear_btn = ttk.Button(
+            self.console_frame, text="Clear", command=self._clear_console, width=8
+        )
+        clear_btn.pack(side=tk.RIGHT, padx=5, pady=2)
+
+    def _setup_log_handler(self) -> None:
+        """Set up the log handler for GUI console."""
+        def log_callback(msg: str) -> None:
+            self._log_queue.put(msg)
+
+        self._log_handler = add_gui_handler(log_callback)
+        self._process_log_queue()
+
+    def _process_log_queue(self) -> None:
+        """Process queued log messages and add them to the console."""
+        try:
+            while True:
+                msg = self._log_queue.get_nowait()
+                self._append_to_console(msg)
+        except queue.Empty:
+            pass
+
+        # Schedule next check
+        self.root.after(100, self._process_log_queue)
+
+    def _append_to_console(self, msg: str) -> None:
+        """Append a message to the console text widget."""
+        self.console_text.configure(state=tk.NORMAL)
+        self.console_text.insert(tk.END, msg + "\n")
+
+        # Limit to 1000 lines
+        line_count = int(self.console_text.index("end-1c").split(".")[0])
+        if line_count > 1000:
+            self.console_text.delete("1.0", f"{line_count - 1000}.0")
+
+        self.console_text.see(tk.END)
+        self.console_text.configure(state=tk.DISABLED)
+
+    def _toggle_console(self) -> None:
+        """Toggle the console panel visibility."""
+        if self._console_visible:
+            self.console_frame.pack_forget()
+            self._console_visible = False
+        else:
+            self.console_frame.pack(fill=tk.X, pady=(5, 0))
+            self._console_visible = True
+
+    def _clear_console(self) -> None:
+        """Clear the console text."""
+        self.console_text.configure(state=tk.NORMAL)
+        self.console_text.delete("1.0", tk.END)
+        self.console_text.configure(state=tk.DISABLED)
 
     def _setup_bindings(self) -> None:
         """Set up keyboard and event bindings."""
@@ -437,6 +539,11 @@ class ViewerGUI:
 
     def _on_close(self) -> None:
         """Handle window close event."""
+        # Remove log handler
+        if self._log_handler:
+            remove_gui_handler(self._log_handler)
+            self._log_handler = None
+
         self.viewer.stop_all()
         self.root.destroy()
 

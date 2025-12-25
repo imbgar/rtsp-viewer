@@ -1,13 +1,12 @@
-"""Main RTSP Viewer controller that integrates all components."""
+"""Main RTSP Viewer controller using unified stream."""
 
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
 
-from audio import AudioPlayer
 from config import CameraConfig, load_cameras
-from recorder import Recorder, StreamProbe
-from stream import RTSPStreamHandler, StreamInfo
+from unified_stream import UnifiedStream, StreamStats
 
 
 class RTSPViewer:
@@ -18,13 +17,18 @@ class RTSPViewer:
         self._cameras: list[CameraConfig] = []
         self._current_camera_index: int = -1
 
-        # Components
-        self._stream_handler: RTSPStreamHandler | None = None
-        self._audio_player: AudioPlayer | None = None
-        self._recorder: Recorder | None = None
+        # Unified stream manager
+        self._stream: UnifiedStream | None = None
+
+        # Callbacks
+        self._status_callback: Callable[[str], None] | None = None
 
         # Load initial configuration
         self.reload_config()
+
+    def set_status_callback(self, callback: Callable[[str], None] | None) -> None:
+        """Set a callback to receive stream status updates."""
+        self._status_callback = callback
 
     def reload_config(self) -> None:
         """Reload camera configuration from file."""
@@ -61,114 +65,74 @@ class RTSPViewer:
         if camera is None:
             return False
 
-        # Create stream handler
-        self._stream_handler = RTSPStreamHandler(camera)
-        success = self._stream_handler.start()
+        # Create unified stream
+        self._stream = UnifiedStream(camera)
 
-        if not success:
-            self._stream_handler = None
-            return False
+        # Wire up status callback
+        if self._status_callback:
+            self._stream.set_status_callback(self._status_callback)
 
-        # Start audio if enabled
-        if enable_audio:
-            self._audio_player = AudioPlayer(camera)
-            self._audio_player.start()
-
-        # Create recorder (but don't start it yet)
-        self._recorder = Recorder(camera)
-
-        return True
+        return self._stream.start(enable_audio=enable_audio)
 
     def stop_stream(self) -> None:
         """Stop the current stream."""
-        # Stop recording if active
-        if self._recorder is not None and self._recorder.is_recording():
-            self._recorder.stop()
-
-        # Stop audio
-        if self._audio_player is not None:
-            self._audio_player.stop()
-            self._audio_player = None
-
-        # Stop video stream
-        if self._stream_handler is not None:
-            self._stream_handler.stop()
-            self._stream_handler = None
-
-        self._recorder = None
+        if self._stream is not None:
+            self._stream.stop()
+            self._stream = None
 
     def is_streaming(self) -> bool:
         """Check if currently streaming."""
-        return self._stream_handler is not None and self._stream_handler.is_running()
+        return self._stream is not None and self._stream.is_streaming()
 
     def get_frame(self) -> np.ndarray | None:
         """Get the latest video frame."""
-        if self._stream_handler is not None:
-            return self._stream_handler.get_frame()
+        if self._stream is not None:
+            return self._stream.get_frame()
         return None
 
-    def get_stream_info(self) -> StreamInfo:
+    def get_stream_info(self) -> StreamStats:
         """Get current stream information."""
-        if self._stream_handler is not None:
-            return self._stream_handler.stream_info
-        return StreamInfo()
+        if self._stream is not None:
+            return self._stream.stats
+        return StreamStats()
 
     def get_actual_fps(self) -> float:
         """Get actual measured FPS."""
-        if self._stream_handler is not None:
-            return self._stream_handler.actual_fps
+        if self._stream is not None:
+            return self._stream.stats.fps
         return 0.0
 
     def enable_audio(self) -> None:
         """Enable audio playback."""
-        if self._audio_player is not None and not self._audio_player.is_playing():
-            self._audio_player.start()
-        elif self._audio_player is None and self.is_streaming():
-            camera = self.get_current_camera()
-            if camera is not None:
-                self._audio_player = AudioPlayer(camera)
-                self._audio_player.start()
+        if self._stream is not None:
+            self._stream.enable_audio()
 
     def disable_audio(self) -> None:
         """Disable audio playback."""
-        if self._audio_player is not None:
-            self._audio_player.stop()
+        if self._stream is not None:
+            self._stream.disable_audio()
 
     def start_recording(self, record_audio: bool = True) -> bool:
         """Start recording the current stream."""
-        if not self.is_streaming():
+        if self._stream is None:
             return False
-
-        if self._recorder is None:
-            camera = self.get_current_camera()
-            if camera is None:
-                return False
-            self._recorder = Recorder(camera)
-
-        return self._recorder.start(record_audio=record_audio)
+        return self._stream.start_recording(record_audio=record_audio)
 
     def stop_recording(self) -> Path | None:
         """Stop recording and return the path to the recorded file."""
-        if self._recorder is not None:
-            return self._recorder.stop()
+        if self._stream is not None:
+            return self._stream.stop_recording()
         return None
 
     def is_recording(self) -> bool:
         """Check if currently recording."""
-        return self._recorder is not None and self._recorder.is_recording()
+        return self._stream is not None and self._stream.is_recording()
 
     def get_recording_duration(self) -> float:
         """Get current recording duration in seconds."""
-        if self._recorder is not None:
-            return self._recorder.get_recording_duration()
+        if self._stream is not None:
+            return self._stream.get_recording_duration()
         return 0.0
-
-    def probe_stream(self) -> dict:
-        """Probe the current camera stream for detailed info."""
-        camera = self.get_current_camera()
-        if camera is None:
-            return {}
-        return StreamProbe.get_stream_info(camera.rtsp_url)
 
     def stop_all(self) -> None:
         """Stop all active components."""
