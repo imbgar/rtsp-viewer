@@ -67,24 +67,24 @@ endif
 
 # Run the application
 run:
-	uv run python main.py
+	uv run python -m rtsp_viewer
 
 # Check system dependencies
 check:
-	uv run python main.py --check
+	uv run python -m rtsp_viewer --check
 
 # Run linter
 lint:
-	uv run ruff check .
+	uv run ruff check src/
 
 # Format code
 format:
-	uv run ruff format .
-	uv run ruff check --fix .
+	uv run ruff format src/
+	uv run ruff check --fix src/
 
 # Run type checker
 typecheck:
-	uv run mypy --ignore-missing-imports .
+	uv run mypy src/
 
 # Run tests (placeholder for future tests)
 test:
@@ -93,6 +93,6 @@ test:
 # Clean build artifacts and cache
 clean:
 	rm -rf __pycache__ .mypy_cache .ruff_cache
-	rm -rf *.egg-info build dist
+	rm -rf *.egg-info build dist src/*.egg-info
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
