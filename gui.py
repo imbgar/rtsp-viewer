@@ -11,6 +11,7 @@ import numpy as np
 from PIL import Image, ImageTk
 
 from logger import add_gui_handler, remove_gui_handler, GUILogHandler
+from state import AppState
 
 if TYPE_CHECKING:
     from viewer import RTSPViewer
@@ -35,9 +36,13 @@ class ViewerGUI:
         self._log_handler: GUILogHandler | None = None
         self._console_visible = False
 
+        # State persistence
+        self._state = AppState()
+
         self._setup_ui()
         self._setup_bindings()
         self._setup_log_handler()
+        self._restore_state()
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
@@ -301,7 +306,12 @@ class ViewerGUI:
                 self._update_button_states()
 
             self.viewer.select_camera(selection)
-            self._update_status(f"Selected: {self.viewer.get_current_camera().name}")
+            camera = self.viewer.get_current_camera()
+            self._update_status(f"Selected: {camera.name}")
+
+            # Save state
+            self._state.last_camera = camera.name
+            self._state.save()
 
     def _on_refresh_config(self) -> None:
         """Handle refresh configuration button click."""
@@ -533,12 +543,44 @@ class ViewerGUI:
         self.camera_combo["values"] = camera_names
 
         if camera_names:
-            self.camera_combo.current(0)
-            self.viewer.select_camera(0)
-            self._update_status(f"Selected: {cameras[0].name}")
+            # Try to restore last selected camera
+            last_camera = self._state.last_camera
+            selected_index = 0
+
+            if last_camera:
+                for i, name in enumerate(camera_names):
+                    if name == last_camera:
+                        selected_index = i
+                        break
+
+            self.camera_combo.current(selected_index)
+            self.viewer.select_camera(selected_index)
+            self._update_status(f"Selected: {cameras[selected_index].name}")
+
+    def _restore_state(self) -> None:
+        """Restore UI state from saved preferences."""
+        # Restore audio preview setting
+        self.audio_preview_var.set(self._state.audio_preview_enabled)
+
+        # Restore record audio setting
+        self.record_audio_var.set(self._state.record_audio_enabled)
+
+        # Restore console visibility
+        if self._state.console_visible:
+            self._toggle_console()
+
+    def _save_state(self) -> None:
+        """Save current UI state."""
+        self._state.audio_preview_enabled = self.audio_preview_var.get()
+        self._state.record_audio_enabled = self.record_audio_var.get()
+        self._state.console_visible = self._console_visible
+        self._state.save()
 
     def _on_close(self) -> None:
         """Handle window close event."""
+        # Save state before closing
+        self._save_state()
+
         # Remove log handler
         if self._log_handler:
             remove_gui_handler(self._log_handler)
