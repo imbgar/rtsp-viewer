@@ -188,7 +188,7 @@ class ViewerGUI:
 
     def _setup_console_panel(self) -> None:
         """Set up the console log panel (initially hidden)."""
-        self.console_frame = ttk.LabelFrame(self.main_frame, text="Console")
+        self.console_frame = ttk.Frame(self.main_frame)
 
         # Text widget with scrollbar
         console_inner = ttk.Frame(self.console_frame)
