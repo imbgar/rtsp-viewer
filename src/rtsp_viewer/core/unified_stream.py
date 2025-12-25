@@ -543,11 +543,11 @@ class UnifiedStream:
                     size = self._current_file.stat().st_size
                     if size > 0:
                         self._recorded_files.append(self._current_file)
-                        log.info(f"Segment {segment_num} saved: {size / 1024 / 1024:.2f} MB")
+                        log.info(f"Segment {segment_num} saved: {self._current_file} ({size / 1024 / 1024:.2f} MB)")
                     else:
-                        log.warning(f"Segment {segment_num} is empty")
+                        log.warning(f"Segment {segment_num} is empty: {self._current_file}")
                 else:
-                    log.warning(f"Segment {segment_num} file not found")
+                    log.warning(f"Segment {segment_num} file not found: {self._current_file}")
 
             except Exception as e:
                 log.exception(f"Recording error: {e}")
