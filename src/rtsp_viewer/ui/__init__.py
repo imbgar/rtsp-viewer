@@ -1,6 +1,6 @@
 """UI modules for RTSP Viewer."""
 
 from rtsp_viewer.ui.gui import ViewerGUI
-from rtsp_viewer.ui.simulator_gui import SimulatorGUI
+from rtsp_viewer.ui.streamer_gui import StreamerGUI
 
-__all__ = ["ViewerGUI", "SimulatorGUI"]
+__all__ = ["ViewerGUI", "StreamerGUI"]

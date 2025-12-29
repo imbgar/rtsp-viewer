@@ -1,4 +1,4 @@
-.PHONY: install dev lint format typecheck test clean run check help install-ffmpeg install-tkinter install-mediamtx install-gstreamer install-system-deps simulate simulate-gst simulator-gui
+.PHONY: install dev lint format typecheck test clean run check help install-ffmpeg install-tkinter install-mediamtx install-gstreamer install-system-deps stream stream-gst streamer-gui
 
 # Detect OS
 UNAME_S := $(shell uname -s)
@@ -12,14 +12,14 @@ help:
 	@echo "  install-system-deps Install system dependencies (ffmpeg, tkinter)"
 	@echo "  install-ffmpeg      Install ffmpeg"
 	@echo "  install-tkinter     Install tkinter"
-	@echo "  install-mediamtx    Install mediamtx (for ffmpeg simulator)"
-	@echo "  install-gstreamer   Install GStreamer (for gst simulator)"
+	@echo "  install-mediamtx    Install mediamtx (for ffmpeg streamer)"
+	@echo "  install-gstreamer   Install GStreamer (for gst streamer)"
 	@echo ""
 	@echo "  run                 Run the application"
 	@echo "  check               Check system dependencies (ffmpeg, ffplay)"
-	@echo "  simulate            Run RTSP simulator with ffmpeg (VIDEO=path required)"
-	@echo "  simulate-gst        Run RTSP simulator with GStreamer (VIDEO=path required)"
-	@echo "  simulator-gui       Run RTSP simulator GUI"
+	@echo "  stream              Run RTSP streamer with ffmpeg (VIDEO=path required)"
+	@echo "  stream-gst          Run RTSP streamer with GStreamer (VIDEO=path required)"
+	@echo "  streamer-gui        Run RTSP streamer GUI"
 	@echo ""
 	@echo "  lint                Run linter (ruff)"
 	@echo "  format              Format code (ruff)"
@@ -70,7 +70,7 @@ else
 	@echo "  Windows: Tkinter is included with Python installer"
 endif
 
-# Install mediamtx (RTSP server for simulator)
+# Install mediamtx (RTSP server for streamer)
 install-mediamtx:
 ifeq ($(UNAME_S),Darwin)
 	@echo "Installing mediamtx via Homebrew..."
@@ -81,7 +81,7 @@ else
 	@echo "  Download from: https://github.com/bluenviron/mediamtx/releases"
 endif
 
-# Install GStreamer (for gst simulator - recommended)
+# Install GStreamer (for gst streamer - recommended)
 install-gstreamer:
 ifeq ($(UNAME_S),Darwin)
 	@echo "Installing GStreamer system libraries via Homebrew..."
@@ -105,32 +105,32 @@ run:
 check:
 	uv run python -m rtsp_viewer --check
 
-# Run the RTSP simulator with ffmpeg+mediamtx (requires VIDEO=path/to/video.mp4)
-simulate:
+# Run the RTSP streamer with ffmpeg+mediamtx (requires VIDEO=path/to/video.mp4)
+stream:
 ifndef VIDEO
-	@echo "Usage: make simulate VIDEO=path/to/video.mp4 [PORT=8554] [NAME=stream]"
+	@echo "Usage: make stream VIDEO=path/to/video.mp4 [PORT=8554] [NAME=stream]"
 	@echo ""
-	@echo "Example: make simulate VIDEO=test.mp4"
-	@echo "         make simulate VIDEO=test.mp4 PORT=8555 NAME=cam1"
+	@echo "Example: make stream VIDEO=test.mp4"
+	@echo "         make stream VIDEO=test.mp4 PORT=8555 NAME=cam1"
 else
-	uv run rtsp-simulator $(VIDEO) $(if $(PORT),-p $(PORT)) $(if $(NAME),-n $(NAME))
+	uv run rtsp-streamer $(VIDEO) $(if $(PORT),-p $(PORT)) $(if $(NAME),-n $(NAME))
 endif
 
-# Run the RTSP simulator with GStreamer (recommended - requires VIDEO=path/to/video.mp4)
-simulate-gst:
+# Run the RTSP streamer with GStreamer (recommended - requires VIDEO=path/to/video.mp4)
+stream-gst:
 ifndef VIDEO
-	@echo "Usage: make simulate-gst VIDEO=path/to/video.mp4 [PORT=8554] [NAME=stream] [LOOP=1]"
+	@echo "Usage: make stream-gst VIDEO=path/to/video.mp4 [PORT=8554] [NAME=stream] [LOOP=1]"
 	@echo ""
-	@echo "Example: make simulate-gst VIDEO=test.mp4"
-	@echo "         make simulate-gst VIDEO=test.mp4 PORT=8555 NAME=cam1"
-	@echo "         make simulate-gst VIDEO=test.mp4 LOOP=1"
+	@echo "Example: make stream-gst VIDEO=test.mp4"
+	@echo "         make stream-gst VIDEO=test.mp4 PORT=8555 NAME=cam1"
+	@echo "         make stream-gst VIDEO=test.mp4 LOOP=1"
 else
-	uv run rtsp-simulator-gst $(VIDEO) $(if $(PORT),-p $(PORT)) $(if $(NAME),-n $(NAME)) $(if $(LOOP),--loop)
+	uv run rtsp-streamer-gst $(VIDEO) $(if $(PORT),-p $(PORT)) $(if $(NAME),-n $(NAME)) $(if $(LOOP),--loop)
 endif
 
-# Run the RTSP simulator GUI
-simulator-gui:
-	uv run rtsp-simulator-gui
+# Run the RTSP streamer GUI
+streamer-gui:
+	uv run rtsp-streamer-gui
 
 # Run linter
 lint:

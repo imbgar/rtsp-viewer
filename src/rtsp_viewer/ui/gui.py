@@ -86,11 +86,11 @@ class ViewerGUI:
         )
         self.refresh_btn.pack(side=tk.LEFT, padx=5)
 
-        # Open Simulator button
-        self.simulator_btn = ttk.Button(
-            info_frame, text="Open Simulator", command=self._on_open_simulator
+        # Open Streamer button
+        self.streamer_btn = ttk.Button(
+            info_frame, text="Open Streamer", command=self._on_open_streamer
         )
-        self.simulator_btn.pack(side=tk.LEFT, padx=5)
+        self.streamer_btn.pack(side=tk.LEFT, padx=5)
 
         # Stream info label
         self.info_label = ttk.Label(info_frame, text="")
@@ -334,11 +334,11 @@ class ViewerGUI:
         except Exception as e:
             self._update_status(f"Config reload failed: {e}")
 
-    def _on_open_simulator(self) -> None:
-        """Handle open simulator button click."""
-        from rtsp_viewer.ui.simulator_gui import SimulatorGUI
+    def _on_open_streamer(self) -> None:
+        """Handle open streamer button click."""
+        from rtsp_viewer.ui.streamer_gui import StreamerGUI
 
-        SimulatorGUI(parent=self.root)
+        StreamerGUI(parent=self.root)
 
     def _on_play(self) -> None:
         """Handle play button click."""

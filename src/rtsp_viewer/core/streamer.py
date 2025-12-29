@@ -1,4 +1,4 @@
-"""RTSP stream simulator - serves a video file as a local RTSP stream."""
+"""RTSP streamer - serves a video file as a local RTSP stream."""
 
 import shutil
 import signal
@@ -10,12 +10,12 @@ from pathlib import Path
 
 from rtsp_viewer.utils.logger import get_logger
 
-log = get_logger("simulator")
+log = get_logger("streamer")
 
 DEFAULT_PORT = 8554
 
 
-class RTSPSimulator:
+class RTSPStreamer:
     """
     Serves a video file as a local RTSP stream.
 
@@ -24,14 +24,14 @@ class RTSPSimulator:
         # Or download from: https://github.com/bluenviron/mediamtx/releases
 
     Usage:
-        simulator = RTSPSimulator("video.mp4")
-        simulator.start()
+        streamer = RTSPStreamer("video.mp4")
+        streamer.start()
         # Stream available at rtsp://localhost:8554/stream
-        simulator.stop()
+        streamer.stop()
 
     Or as context manager:
-        with RTSPSimulator("video.mp4") as sim:
-            print(f"Stream at: {sim.rtsp_url}")
+        with RTSPStreamer("video.mp4") as s:
+            print(f"Stream at: {s.rtsp_url}")
             # Do something with the stream
     """
 
@@ -68,7 +68,7 @@ class RTSPSimulator:
     @staticmethod
     def is_available() -> bool:
         """Check if all dependencies are available."""
-        deps = RTSPSimulator.check_dependencies()
+        deps = RTSPStreamer.check_dependencies()
         return all(deps.values())
 
     def start(self) -> bool:
@@ -89,7 +89,7 @@ class RTSPSimulator:
             return False
 
         if self._running:
-            log.warning("Simulator already running")
+            log.warning("Streamer already running")
             return True
 
         # Start mediamtx RTSP server
@@ -105,7 +105,7 @@ class RTSPSimulator:
             return False
 
         self._running = True
-        log.info(f"Simulator running - stream available at: {self.rtsp_url}")
+        log.info(f"Streamer running - stream available at: {self.rtsp_url}")
         return True
 
     def _start_server(self) -> bool:
@@ -286,11 +286,11 @@ paths:
                 self._ffmpeg_process = None
 
     def stop(self) -> None:
-        """Stop the simulator."""
+        """Stop the streamer."""
         if not self._running:
             return
 
-        log.info("Stopping simulator...")
+        log.info("Stopping streamer...")
         self._running = False
 
         self._stop_stream()
@@ -300,10 +300,10 @@ paths:
             self._stderr_thread.join(timeout=2.0)
             self._stderr_thread = None
 
-        log.info("Simulator stopped")
+        log.info("Streamer stopped")
 
     def is_running(self) -> bool:
-        """Check if the simulator is running."""
+        """Check if the streamer is running."""
         if not self._running:
             return False
         if self._ffmpeg_process is None or self._server_process is None:
@@ -324,12 +324,12 @@ paths:
         return False
 
 
-def run_simulator_cli():
-    """CLI entry point for running the simulator standalone."""
+def run_streamer_cli():
+    """CLI entry point for running the streamer standalone."""
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="RTSP Stream Simulator - Serve a video file as an RTSP stream",
+        description="RTSP Streamer - Serve a video file as an RTSP stream",
     )
     parser.add_argument(
         "video",
@@ -351,7 +351,7 @@ def run_simulator_cli():
     args = parser.parse_args()
 
     # Check dependencies
-    deps = RTSPSimulator.check_dependencies()
+    deps = RTSPStreamer.check_dependencies()
     missing = [k for k, v in deps.items() if not v]
     if missing:
         print(f"Missing dependencies: {', '.join(missing)}")
@@ -359,7 +359,7 @@ def run_simulator_cli():
         print("  brew install ffmpeg mediamtx")
         sys.exit(1)
 
-    simulator = RTSPSimulator(
+    streamer = RTSPStreamer(
         video_path=args.video,
         port=args.port,
         stream_name=args.name,
@@ -368,27 +368,27 @@ def run_simulator_cli():
     # Handle Ctrl+C gracefully
     def signal_handler(sig, frame):
         print("\nStopping...")
-        simulator.stop()
+        streamer.stop()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    if not simulator.start():
+    if not streamer.start():
         sys.exit(1)
 
-    print(f"\nRTSP stream available at: {simulator.rtsp_url}")
+    print(f"\nRTSP stream available at: {streamer.rtsp_url}")
     print("Press Ctrl+C to stop\n")
 
     # Keep running until interrupted
     try:
-        while simulator.is_running():
+        while streamer.is_running():
             time.sleep(1.0)
     except KeyboardInterrupt:
         pass
     finally:
-        simulator.stop()
+        streamer.stop()
 
 
 if __name__ == "__main__":
-    run_simulator_cli()
+    run_streamer_cli()

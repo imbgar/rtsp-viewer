@@ -1,4 +1,4 @@
-"""GStreamer-based RTSP stream simulator - more reliable than ffmpeg+mediamtx."""
+"""GStreamer-based RTSP streamer - more reliable than ffmpeg+mediamtx."""
 
 import shutil
 import signal
@@ -9,7 +9,7 @@ from pathlib import Path
 
 from rtsp_viewer.utils.logger import get_logger
 
-log = get_logger("gst_simulator")
+log = get_logger("gst_streamer")
 
 DEFAULT_PORT = 8554
 
@@ -28,7 +28,7 @@ except (ImportError, ValueError) as e:
     _gst_import_error = str(e)
 
 
-class GstRTSPSimulator:
+class GstRTSPStreamer:
     """
     Serves a video file as a local RTSP stream using GStreamer.
 
@@ -38,14 +38,14 @@ class GstRTSPSimulator:
         brew install gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-rtsp-server
 
     Usage:
-        simulator = GstRTSPSimulator("video.mp4")
-        simulator.start()
+        streamer = GstRTSPStreamer("video.mp4")
+        streamer.start()
         # Stream available at rtsp://localhost:8554/stream
-        simulator.stop()
+        streamer.stop()
 
     Or as context manager:
-        with GstRTSPSimulator("video.mp4") as sim:
-            print(f"Stream at: {sim.rtsp_url}")
+        with GstRTSPStreamer("video.mp4") as s:
+            print(f"Stream at: {s.rtsp_url}")
     """
 
     def __init__(
@@ -80,7 +80,7 @@ class GstRTSPSimulator:
     @staticmethod
     def is_available() -> bool:
         """Check if all dependencies are available."""
-        deps = GstRTSPSimulator.check_dependencies()
+        deps = GstRTSPStreamer.check_dependencies()
         return all(deps.values())
 
     @staticmethod
@@ -103,7 +103,7 @@ class GstRTSPSimulator:
             return False
 
         if self._running:
-            log.warning("Simulator already running")
+            log.warning("Streamer already running")
             return True
 
         try:
@@ -172,7 +172,7 @@ class GstRTSPSimulator:
             log.error(f"Main loop error: {e}")
 
     def stop(self) -> None:
-        """Stop the simulator."""
+        """Stop the streamer."""
         if not self._running:
             return
 
@@ -191,7 +191,7 @@ class GstRTSPSimulator:
         log.info("GStreamer RTSP server stopped")
 
     def is_running(self) -> bool:
-        """Check if the simulator is running."""
+        """Check if the streamer is running."""
         return self._running and self._loop_thread is not None and self._loop_thread.is_alive()
 
     def __enter__(self):
@@ -205,9 +205,9 @@ class GstRTSPSimulator:
         return False
 
 
-class LoopingGstRTSPSimulator(GstRTSPSimulator):
+class LoopingGstRTSPStreamer(GstRTSPStreamer):
     """
-    GStreamer RTSP simulator with infinite looping support.
+    GStreamer RTSP streamer with infinite looping support.
 
     Uses a custom media factory that seeks back to start when EOS is reached.
     """
@@ -263,12 +263,12 @@ class LoopingGstRTSPSimulator(GstRTSPSimulator):
         log.info(f"Looping RTSP server started on port {self.port}")
 
 
-def run_gst_simulator_cli():
-    """CLI entry point for running the GStreamer simulator standalone."""
+def run_gst_streamer_cli():
+    """CLI entry point for running the GStreamer streamer standalone."""
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="GStreamer RTSP Stream Simulator - Serve a video file as an RTSP stream",
+        description="GStreamer RTSP Streamer - Serve a video file as an RTSP stream",
     )
     parser.add_argument(
         "video",
@@ -300,20 +300,20 @@ def run_gst_simulator_cli():
     args = parser.parse_args()
 
     # Check dependencies
-    deps = GstRTSPSimulator.check_dependencies()
+    deps = GstRTSPStreamer.check_dependencies()
     missing = [k for k, v in deps.items() if not v]
     if missing:
         print(f"Missing dependencies: {', '.join(missing)}")
         if not deps["gst-rtsp-server"]:
-            error = GstRTSPSimulator.get_import_error()
+            error = GstRTSPStreamer.get_import_error()
             print(f"Import error: {error}")
         print("\nInstall with:")
         print("  brew install gstreamer gst-plugins-base gst-plugins-good \\")
         print("               gst-plugins-bad gst-rtsp-server pygobject3")
         sys.exit(1)
 
-    SimClass = LoopingGstRTSPSimulator if args.loop else GstRTSPSimulator
-    simulator = SimClass(
+    StreamerClass = LoopingGstRTSPStreamer if args.loop else GstRTSPStreamer
+    streamer = StreamerClass(
         video_path=args.video,
         port=args.port,
         stream_name=args.name,
@@ -323,27 +323,27 @@ def run_gst_simulator_cli():
     # Handle Ctrl+C gracefully
     def signal_handler(sig, frame):
         print("\nStopping...")
-        simulator.stop()
+        streamer.stop()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    if not simulator.start():
+    if not streamer.start():
         sys.exit(1)
 
-    print(f"\nRTSP stream available at: {simulator.rtsp_url}")
+    print(f"\nRTSP stream available at: {streamer.rtsp_url}")
     print("Press Ctrl+C to stop\n")
 
     # Keep running until interrupted
     try:
-        while simulator.is_running():
+        while streamer.is_running():
             time.sleep(1.0)
     except KeyboardInterrupt:
         pass
     finally:
-        simulator.stop()
+        streamer.stop()
 
 
 if __name__ == "__main__":
-    run_gst_simulator_cli()
+    run_gst_streamer_cli()

@@ -1,4 +1,4 @@
-"""GUI for RTSP stream simulator using tkinter."""
+"""GUI for RTSP streamer using tkinter."""
 
 import queue
 import threading
@@ -10,18 +10,18 @@ import cv2
 import numpy as np
 from PIL import Image, ImageTk
 
-from rtsp_viewer.core.gst_simulator import GstRTSPSimulator
-from rtsp_viewer.core.simulator import DEFAULT_PORT, RTSPSimulator
+from rtsp_viewer.core.gst_streamer import GstRTSPStreamer
+from rtsp_viewer.core.streamer import DEFAULT_PORT, RTSPStreamer
 from rtsp_viewer.utils.logger import GUILogHandler, add_gui_handler, get_logger, remove_gui_handler
 
-log = get_logger("simulator_gui")
+log = get_logger("streamer_gui")
 
 
-class SimulatorGUI:
-    """GUI window for RTSP stream simulator."""
+class StreamerGUI:
+    """GUI window for RTSP streamer."""
 
     def __init__(self, parent: tk.Tk | None = None):
-        """Initialize the simulator GUI.
+        """Initialize the streamer GUI.
 
         Args:
             parent: Parent window. If None, creates a new root window.
@@ -33,12 +33,12 @@ class SimulatorGUI:
         else:
             self.root = tk.Tk()
 
-        self.root.title("RTSP Stream Simulator")
+        self.root.title("RTSP Streamer")
         self.root.geometry("800x700")
         self.root.minsize(600, 500)
 
-        # Simulator instance (can be RTSPSimulator or GstRTSPSimulator)
-        self._simulator: RTSPSimulator | GstRTSPSimulator | None = None
+        # Streamer instance (can be RTSPStreamer or GstRTSPStreamer)
+        self._streamer: RTSPStreamer | GstRTSPStreamer | None = None
         self._video_path: Path | None = None
 
         # Preview state
@@ -119,7 +119,7 @@ class SimulatorGUI:
         backend_frame.pack(fill=tk.X, padx=10, pady=5)
 
         ttk.Label(backend_frame, text="Backend:").pack(side=tk.LEFT)
-        default_backend = "gstreamer" if GstRTSPSimulator.is_available() else "ffmpeg"
+        default_backend = "gstreamer" if GstRTSPStreamer.is_available() else "ffmpeg"
         self.backend_var = tk.StringVar(value=default_backend)
         self.backend_combo = ttk.Combobox(
             backend_frame,
@@ -189,14 +189,14 @@ class SimulatorGUI:
 
         # Start button
         self.start_btn = ttk.Button(
-            button_frame, text="Start Simulator", command=self._on_start, width=15
+            button_frame, text="Start Streamer", command=self._on_start, width=15
         )
         self.start_btn.pack(side=tk.LEFT, padx=5)
         self.start_btn.state(["disabled"])
 
         # Stop button
         self.stop_btn = ttk.Button(
-            button_frame, text="Stop Simulator", command=self._on_stop, width=15
+            button_frame, text="Stop Streamer", command=self._on_stop, width=15
         )
         self.stop_btn.pack(side=tk.LEFT, padx=5)
         self.stop_btn.state(["disabled"])
@@ -225,9 +225,9 @@ class SimulatorGUI:
         self.status_label = ttk.Label(status_frame, text="Ready")
         self.status_label.pack(side=tk.LEFT)
 
-        # Simulator status indicator
-        self.sim_status_label = ttk.Label(status_frame, text="", foreground="gray")
-        self.sim_status_label.pack(side=tk.RIGHT, padx=10)
+        # Streamer status indicator
+        self.streamer_status_label = ttk.Label(status_frame, text="", foreground="gray")
+        self.streamer_status_label.pack(side=tk.RIGHT, padx=10)
 
     def _setup_console_panel(self) -> None:
         """Set up the console log panel."""
@@ -310,17 +310,17 @@ class SimulatorGUI:
     def _check_dependencies(self) -> None:
         """Check if required dependencies are available."""
         # Check ffmpeg backend
-        ffmpeg_deps = RTSPSimulator.check_dependencies()
+        ffmpeg_deps = RTSPStreamer.check_dependencies()
         ffmpeg_ok = all(ffmpeg_deps.values())
 
         # Check GStreamer backend
-        gst_deps = GstRTSPSimulator.check_dependencies()
+        gst_deps = GstRTSPStreamer.check_dependencies()
         gst_ok = all(gst_deps.values())
 
         if gst_ok:
             log.info("GStreamer backend available (recommended)")
         else:
-            log.warning(f"GStreamer not available: {GstRTSPSimulator.get_import_error()}")
+            log.warning(f"GStreamer not available: {GstRTSPStreamer.get_import_error()}")
             log.info(
                 "Install with: brew install gstreamer gst-plugins-base "
                 "gst-plugins-good gst-plugins-bad gst-rtsp-server pygobject3"
@@ -334,7 +334,7 @@ class SimulatorGUI:
 
         if not gst_ok and not ffmpeg_ok:
             self._update_status(
-                "No simulator backends available - install GStreamer or ffmpeg+mediamtx"
+                "No streamer backends available - install GStreamer or ffmpeg+mediamtx"
             )
 
     def _update_backend_status(self) -> None:
@@ -342,15 +342,15 @@ class SimulatorGUI:
         backend = self.backend_var.get()
 
         if backend == "gstreamer":
-            if GstRTSPSimulator.is_available():
+            if GstRTSPStreamer.is_available():
                 self.backend_status.config(text="(available - recommended)", foreground="green")
             else:
                 self.backend_status.config(text="(not installed)", foreground="red")
         else:  # ffmpeg
-            if RTSPSimulator.is_available():
+            if RTSPStreamer.is_available():
                 self.backend_status.config(text="(available)", foreground="green")
             else:
-                deps = RTSPSimulator.check_dependencies()
+                deps = RTSPStreamer.check_dependencies()
                 missing = [k for k, v in deps.items() if not v]
                 msg = f"(missing: {', '.join(missing)})"
                 self.backend_status.config(text=msg, foreground="red")
@@ -404,12 +404,12 @@ class SimulatorGUI:
 
         # Check if selected backend is available
         if backend == "gstreamer":
-            if not GstRTSPSimulator.is_available():
+            if not GstRTSPStreamer.is_available():
                 self._update_status("GStreamer not available - run: make install-gstreamer")
                 return
         else:  # ffmpeg
-            if not RTSPSimulator.is_available():
-                deps = RTSPSimulator.check_dependencies()
+            if not RTSPStreamer.is_available():
+                deps = RTSPStreamer.check_dependencies()
                 missing = [k for k, v in deps.items() if not v]
                 self._update_status(f"FFmpeg backend missing: {', '.join(missing)}")
                 return
@@ -423,9 +423,9 @@ class SimulatorGUI:
 
         stream_name = self.stream_name_var.get() or "stream"
 
-        # Create simulator based on selected backend
+        # Create streamer based on selected backend
         if backend == "gstreamer":
-            self._simulator = GstRTSPSimulator(
+            self._streamer = GstRTSPStreamer(
                 video_path=self._video_path,
                 port=port,
                 stream_name=stream_name,
@@ -433,7 +433,7 @@ class SimulatorGUI:
             )
             log.info("Using GStreamer backend")
         else:
-            self._simulator = RTSPSimulator(
+            self._streamer = RTSPStreamer(
                 video_path=self._video_path,
                 port=port,
                 stream_name=stream_name,
@@ -441,22 +441,22 @@ class SimulatorGUI:
             )
             log.info("Using FFmpeg backend")
 
-        self._update_status("Starting simulator...")
+        self._update_status("Starting streamer...")
         self.start_btn.state(["disabled"])
 
         # Start in background thread
         def start():
-            success = self._simulator.start()
+            success = self._streamer.start()
             self.root.after(0, lambda: self._on_started(success))
 
         threading.Thread(target=start, daemon=True).start()
 
     def _on_started(self, success: bool) -> None:
-        """Handle simulator start result."""
+        """Handle streamer start result."""
         if success:
             backend = self.backend_var.get()
-            self._update_status(f"Simulator running ({backend})")
-            self.sim_status_label.config(text="STREAMING", foreground="green")
+            self._update_status(f"Streamer running ({backend})")
+            self.streamer_status_label.config(text="STREAMING", foreground="green")
             self.stop_btn.state(["!disabled"])
             self.browse_btn.state(["disabled"])
             self.port_entry.state(["disabled"])
@@ -464,21 +464,21 @@ class SimulatorGUI:
             self.stream_audio_check.state(["disabled"])
             self.backend_combo.state(["disabled"])
 
-            # Monitor simulator status
-            self._monitor_simulator()
+            # Monitor streamer status
+            self._monitor_streamer()
         else:
-            self._update_status("Failed to start simulator")
+            self._update_status("Failed to start streamer")
             self.start_btn.state(["!disabled"])
 
     def _on_stop(self) -> None:
         """Handle stop button click."""
-        if self._simulator:
-            self._update_status("Stopping simulator...")
-            self._simulator.stop()
-            self._simulator = None
+        if self._streamer:
+            self._update_status("Stopping streamer...")
+            self._streamer.stop()
+            self._streamer = None
 
-        self._update_status("Simulator stopped")
-        self.sim_status_label.config(text="", foreground="gray")
+        self._update_status("Streamer stopped")
+        self.streamer_status_label.config(text="", foreground="gray")
         self.start_btn.state(["!disabled"])
         self.stop_btn.state(["disabled"])
         self.browse_btn.state(["!disabled"])
@@ -487,13 +487,13 @@ class SimulatorGUI:
         self.stream_audio_check.state(["!disabled"])
         self.backend_combo.state(["!disabled"])
 
-    def _monitor_simulator(self) -> None:
-        """Monitor simulator status and update UI."""
-        if self._simulator and self._simulator.is_running():
-            self.root.after(1000, self._monitor_simulator)
-        elif self._simulator:
-            # Simulator stopped unexpectedly
-            log.warning("Simulator stopped unexpectedly")
+    def _monitor_streamer(self) -> None:
+        """Monitor streamer status and update UI."""
+        if self._streamer and self._streamer.is_running():
+            self.root.after(1000, self._monitor_streamer)
+        elif self._streamer:
+            # Streamer stopped unexpectedly
+            log.warning("Streamer stopped unexpectedly")
             self._on_stop()
 
     def _on_preview_toggle(self) -> None:
@@ -618,10 +618,10 @@ class SimulatorGUI:
 
     def _on_close(self) -> None:
         """Handle window close event."""
-        # Stop simulator if running
-        if self._simulator:
-            self._simulator.stop()
-            self._simulator = None
+        # Stop streamer if running
+        if self._streamer:
+            self._streamer.stop()
+            self._streamer = None
 
         # Stop preview
         self._stop_preview()
@@ -639,11 +639,11 @@ class SimulatorGUI:
             self.root.mainloop()
 
 
-def run_simulator_gui():
-    """Entry point for running the simulator GUI standalone."""
-    gui = SimulatorGUI()
+def run_streamer_gui():
+    """Entry point for running the streamer GUI standalone."""
+    gui = StreamerGUI()
     gui.run()
 
 
 if __name__ == "__main__":
-    run_simulator_gui()
+    run_streamer_gui()

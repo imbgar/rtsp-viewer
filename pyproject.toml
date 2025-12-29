@@ -13,9 +13,9 @@ dependencies = [
 
 [project.scripts]
 rtsp-viewer = "rtsp_viewer.cli:main"
-rtsp-simulator = "rtsp_viewer.core.simulator:run_simulator_cli"
-rtsp-simulator-gst = "rtsp_viewer.core.gst_simulator:run_gst_simulator_cli"
-rtsp-simulator-gui = "rtsp_viewer.ui.simulator_gui:run_simulator_gui"
+rtsp-streamer = "rtsp_viewer.core.streamer:run_streamer_cli"
+rtsp-streamer-gst = "rtsp_viewer.core.gst_streamer:run_gst_streamer_cli"
+rtsp-streamer-gui = "rtsp_viewer.ui.streamer_gui:run_streamer_gui"
 
 [project.optional-dependencies]
 gstreamer = [

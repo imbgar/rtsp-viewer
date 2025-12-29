@@ -1,6 +1,6 @@
 # RTSP Stream Viewer
 
-A production-ready RTSP stream viewer and recorder built with Python, OpenCV, and FFmpeg. Includes an RTSP simulator for testing without real cameras.
+A production-ready RTSP stream viewer and recorder built with Python, OpenCV, and FFmpeg. Includes an RTSP streamer for testing without real cameras.
 
 ## Features
 
@@ -17,7 +17,7 @@ A production-ready RTSP stream viewer and recorder built with Python, OpenCV, an
 - **30-minute segments** — automatic file rotation for reliability
 - **AAC audio** — transcoded to 128 kbps for broad compatibility
 
-### RTSP Simulator
+### RTSP Streamer
 - **Test without cameras** — serve any video file as an RTSP stream
 - **Two backends** — GStreamer (recommended) or FFmpeg + mediamtx
 - **GUI and CLI** — visual interface or command-line control
@@ -27,7 +27,7 @@ A production-ready RTSP stream viewer and recorder built with Python, OpenCV, an
 - **Native Tkinter GUI** — cross-platform, no web dependencies
 - **Console panel** — built-in log viewer for debugging
 - **State persistence** — remembers window size, audio settings, last camera
-- **Open Simulator** — launch simulator directly from main viewer
+- **Open Streamer** — launch streamer directly from main viewer
 
 ---
 
@@ -54,8 +54,8 @@ make run
 | Python 3.11+ | Runtime | — |
 | FFmpeg | Audio playback, recording | `brew install ffmpeg` |
 | Tkinter | GUI framework | `brew install python-tk@3.13` |
-| GStreamer | Simulator (optional) | `make install-gstreamer` |
-| mediamtx | Simulator fallback (optional) | `make install-mediamtx` |
+| GStreamer | Streamer (optional) | `make install-gstreamer` |
+| mediamtx | Streamer fallback (optional) | `make install-mediamtx` |
 
 ---
 
@@ -77,7 +77,7 @@ make install
 sudo apt update
 sudo apt install ffmpeg python3-tk
 
-# For simulator
+# For streamer
 sudo apt install python3-gst-1.0 gstreamer1.0-plugins-base \
   gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
   gir1.2-gst-rtsp-server-1.0
@@ -174,7 +174,7 @@ rtsp-viewer --check
 | Audio | Toggle audio playback |
 | Refresh | Reload camera configuration |
 | Console | Show/hide log panel |
-| Simulator | Open RTSP simulator window |
+| Streamer | Open RTSP streamer window |
 
 ---
 
@@ -217,14 +217,14 @@ Enable `low_latency: true` for real-time monitoring scenarios.
 
 ---
 
-## RTSP Simulator
+## RTSP Streamer
 
 Test the viewer without real cameras by serving a video file as an RTSP stream.
 
 ### GUI Mode
 
 ```bash
-make simulator-gui
+make streamer-gui
 ```
 
 1. Browse and select a video file
@@ -236,13 +236,13 @@ make simulator-gui
 
 ```bash
 # GStreamer backend (recommended)
-make simulate-gst VIDEO=test.mp4
+make stream-gst VIDEO=test.mp4
 
 # With options
-make simulate-gst VIDEO=test.mp4 PORT=8555 NAME=cam1 LOOP=1
+make stream-gst VIDEO=test.mp4 PORT=8555 NAME=cam1 LOOP=1
 
 # FFmpeg + mediamtx fallback
-make simulate VIDEO=test.mp4
+make stream VIDEO=test.mp4
 ```
 
 ### Backend Comparison
@@ -254,7 +254,7 @@ make simulate VIDEO=test.mp4
 | Setup | More packages | Two binaries |
 | Recommendation | **Primary** | Fallback |
 
-### Installing Simulator Dependencies
+### Installing Streamer Dependencies
 
 ```bash
 # GStreamer (recommended)
@@ -301,11 +301,11 @@ src/rtsp_viewer/
 │   ├── config.py             # YAML camera configuration
 │   ├── unified_stream.py     # Video, audio, recording manager
 │   ├── viewer.py             # Multi-camera controller
-│   ├── simulator.py          # FFmpeg + mediamtx simulator
-│   └── gst_simulator.py      # GStreamer simulator
+│   ├── streamer.py           # FFmpeg + mediamtx streamer
+│   └── gst_streamer.py       # GStreamer streamer
 ├── ui/
 │   ├── gui.py                # Main viewer window
-│   └── simulator_gui.py      # Simulator control window
+│   └── streamer_gui.py       # Streamer control window
 └── utils/
     ├── logger.py             # Logging with GUI handler
     └── state.py              # Persistent settings
@@ -336,9 +336,9 @@ make dev  # Install with dev dependencies
 | Command | Description |
 |---------|-------------|
 | `rtsp-viewer` | Main viewer application |
-| `rtsp-simulator` | FFmpeg simulator CLI |
-| `rtsp-simulator-gst` | GStreamer simulator CLI |
-| `rtsp-simulator-gui` | Simulator GUI |
+| `rtsp-streamer` | FFmpeg streamer CLI |
+| `rtsp-streamer-gst` | GStreamer streamer CLI |
+| `rtsp-streamer-gui` | Streamer GUI |
 
 ---
 
