@@ -3,10 +3,11 @@
 A production-ready RTSP stream viewer and recorder built with Python, OpenCV, and FFmpeg. Includes an RTSP streamer for testing without real cameras.
 
 ## Viewer
-<img width="1030" height="796" alt="image" src="https://github.com/user-attachments/assets/79fd3f47-f1bc-4fff-b180-f6c81dc5ce7f" />
+<img width="1026" height="795" alt="image" src="https://github.com/user-attachments/assets/64970a81-240c-42c2-ab7a-9ad18cc03349" />
 
 ## Streamer
-<img width="801" height="729" alt="image" src="https://github.com/user-attachments/assets/ebf81cc4-aca7-4463-a913-99a5889becd3" />
+<img width="801" height="729" alt="image" src="https://github.com/user-attachments/assets/574babd8-e7ac-4c24-9069-bae7cebc311e" />
+
 
 ## Features
 
