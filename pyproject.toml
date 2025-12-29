@@ -13,8 +13,14 @@ dependencies = [
 
 [project.scripts]
 rtsp-viewer = "rtsp_viewer.cli:main"
+rtsp-simulator = "rtsp_viewer.core.simulator:run_simulator_cli"
+rtsp-simulator-gst = "rtsp_viewer.core.gst_simulator:run_gst_simulator_cli"
+rtsp-simulator-gui = "rtsp_viewer.ui.simulator_gui:run_simulator_gui"
 
 [project.optional-dependencies]
+gstreamer = [
+    "PyGObject>=3.42.0",
+]
 dev = [
     "ruff>=0.1.0",
     "mypy>=1.5.0",
