@@ -13,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 rtsp-viewer = "rtsp_viewer.cli:main"
+rtsp-simulator = "rtsp_viewer.core.simulator:run_simulator_cli"
 
 [project.optional-dependencies]
 dev = [

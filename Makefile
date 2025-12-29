@@ -1,4 +1,4 @@
-.PHONY: install dev lint format typecheck test clean run check help install-ffmpeg install-tkinter install-system-deps
+.PHONY: install dev lint format typecheck test clean run check help install-ffmpeg install-tkinter install-mediamtx install-system-deps simulate
 
 # Detect OS
 UNAME_S := $(shell uname -s)
@@ -12,9 +12,11 @@ help:
 	@echo "  install-system-deps Install system dependencies (ffmpeg, tkinter)"
 	@echo "  install-ffmpeg      Install ffmpeg"
 	@echo "  install-tkinter     Install tkinter"
+	@echo "  install-mediamtx    Install mediamtx (for simulator)"
 	@echo ""
 	@echo "  run                 Run the application"
 	@echo "  check               Check system dependencies (ffmpeg, ffplay)"
+	@echo "  simulate            Run RTSP simulator (VIDEO=path required)"
 	@echo ""
 	@echo "  lint                Run linter (ruff)"
 	@echo "  format              Format code (ruff)"
@@ -33,7 +35,7 @@ dev:
 	uv sync --extra dev
 
 # Install all system dependencies
-install-system-deps: install-ffmpeg install-tkinter
+install-system-deps: install-ffmpeg install-tkinter install-mediamtx
 
 # Install ffmpeg
 install-ffmpeg:
@@ -65,6 +67,17 @@ else
 	@echo "  Windows: Tkinter is included with Python installer"
 endif
 
+# Install mediamtx (RTSP server for simulator)
+install-mediamtx:
+ifeq ($(UNAME_S),Darwin)
+	@echo "Installing mediamtx via Homebrew..."
+	brew install mediamtx
+else
+	@echo "Warning: Automatic installation only supported on macOS."
+	@echo "Please install mediamtx manually:"
+	@echo "  Download from: https://github.com/bluenviron/mediamtx/releases"
+endif
+
 # Run the application
 run:
 	uv run python -m rtsp_viewer
@@ -72,6 +85,17 @@ run:
 # Check system dependencies
 check:
 	uv run python -m rtsp_viewer --check
+
+# Run the RTSP simulator (requires VIDEO=path/to/video.mp4)
+simulate:
+ifndef VIDEO
+	@echo "Usage: make simulate VIDEO=path/to/video.mp4 [PORT=8554] [NAME=stream]"
+	@echo ""
+	@echo "Example: make simulate VIDEO=test.mp4"
+	@echo "         make simulate VIDEO=test.mp4 PORT=8555 NAME=cam1"
+else
+	uv run rtsp-simulator $(VIDEO) $(if $(PORT),-p $(PORT)) $(if $(NAME),-n $(NAME))
+endif
 
 # Run linter
 lint:
