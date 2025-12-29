@@ -1,6 +1,7 @@
 """GUI for RTSP streamer using tkinter."""
 
 import queue
+import sys
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -16,7 +17,6 @@ from rtsp_viewer.utils.logger import GUILogHandler, add_gui_handler, get_logger,
 from rtsp_viewer.utils.state import AppState
 
 log = get_logger("streamer_gui")
-
 
 class StreamerGUI:
     """GUI window for RTSP streamer."""
@@ -34,9 +34,13 @@ class StreamerGUI:
         else:
             self.root = tk.Tk()
 
-        self.root.title("RTSP Streamer")
+        self.root.title("PyRTSP Streamer")
         self.root.geometry("800x700")
         self.root.minsize(600, 500)
+
+        # Set application icon (only for standalone mode)
+        if not self._is_toplevel:
+            self._set_app_icon()
 
         # Streamer instance (can be RTSPStreamer or GstRTSPStreamer)
         self._streamer: RTSPStreamer | GstRTSPStreamer | None = None
@@ -59,6 +63,33 @@ class StreamerGUI:
         self._setup_log_handler()
         self._check_dependencies()
         self._restore_state()
+
+    def _set_app_icon(self) -> None:
+        """Set the application icon for dock/taskbar."""
+        icons_dir = Path(__file__).parent.parent.parent.parent / "assets" / "icons"
+        png_path = icons_dir / "icon.png"
+        icns_path = icons_dir / "rtsp_viewer.icns"
+
+        # Set window icon using PNG (works cross-platform)
+        if png_path.exists():
+            try:
+                icon_image = Image.open(png_path)
+                icon_photo = ImageTk.PhotoImage(icon_image)
+                self.root.iconphoto(True, icon_photo)
+                self._icon_photo = icon_photo  # Keep reference to prevent GC
+            except Exception:
+                pass
+
+        # macOS: Set dock icon using PyObjC if available
+        if sys.platform == "darwin" and icns_path.exists():
+            try:
+                from AppKit import NSApplication, NSImage
+                app = NSApplication.sharedApplication()
+                icon = NSImage.alloc().initWithContentsOfFile_(str(icns_path))
+                if icon:
+                    app.setApplicationIconImage_(icon)
+            except ImportError:
+                pass
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""

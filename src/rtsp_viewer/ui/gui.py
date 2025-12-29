@@ -1,8 +1,10 @@
 """GUI for RTSP stream viewer using tkinter."""
 
 import queue
+import sys
 import threading
 import tkinter as tk
+from pathlib import Path
 from tkinter import messagebox, ttk
 from typing import TYPE_CHECKING
 
@@ -16,16 +18,18 @@ from rtsp_viewer.utils.state import AppState
 if TYPE_CHECKING:
     from rtsp_viewer.core.viewer import RTSPViewer
 
-
 class ViewerGUI:
     """Main GUI window for RTSP stream viewing and recording."""
 
     def __init__(self, viewer: "RTSPViewer"):
         self.viewer = viewer
         self.root = tk.Tk()
-        self.root.title("RTSP Stream Viewer")
+        self.root.title("PyRTSP Viewer")
         self.root.geometry("1024x768")
         self.root.minsize(800, 600)
+
+        # Set application icon
+        self._set_app_icon()
 
         # Image reference to prevent garbage collection
         self._photo: ImageTk.PhotoImage | None = None
@@ -43,6 +47,33 @@ class ViewerGUI:
         self._setup_bindings()
         self._setup_log_handler()
         self._restore_state()
+
+    def _set_app_icon(self) -> None:
+        """Set the application icon for dock/taskbar."""
+        icons_dir = Path(__file__).parent.parent.parent.parent / "assets" / "icons"
+        png_path = icons_dir / "icon.png"
+        icns_path = icons_dir / "rtsp_viewer.icns"
+
+        # Set window icon using PNG (works cross-platform)
+        if png_path.exists():
+            try:
+                icon_image = Image.open(png_path)
+                icon_photo = ImageTk.PhotoImage(icon_image)
+                self.root.iconphoto(True, icon_photo)
+                self._icon_photo = icon_photo  # Keep reference to prevent GC
+            except Exception:
+                pass
+
+        # macOS: Set dock icon using PyObjC if available
+        if sys.platform == "darwin" and icns_path.exists():
+            try:
+                from AppKit import NSApplication, NSImage
+                app = NSApplication.sharedApplication()
+                icon = NSImage.alloc().initWithContentsOfFile_(str(icns_path))
+                if icon:
+                    app.setApplicationIconImage_(icon)
+            except ImportError:
+                pass  # PyObjC not installed
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
