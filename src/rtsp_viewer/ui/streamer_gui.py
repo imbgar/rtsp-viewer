@@ -13,6 +13,7 @@ from PIL import Image, ImageTk
 from rtsp_viewer.core.gst_streamer import GstRTSPStreamer
 from rtsp_viewer.core.streamer import DEFAULT_PORT, RTSPStreamer
 from rtsp_viewer.utils.logger import GUILogHandler, add_gui_handler, get_logger, remove_gui_handler
+from rtsp_viewer.utils.state import AppState
 
 log = get_logger("streamer_gui")
 
@@ -50,10 +51,14 @@ class StreamerGUI:
         self._log_queue: queue.Queue[str] = queue.Queue()
         self._log_handler: GUILogHandler | None = None
 
+        # State persistence
+        self._state = AppState()
+
         self._setup_ui()
         self._setup_bindings()
         self._setup_log_handler()
         self._check_dependencies()
+        self._restore_state()
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
@@ -616,8 +621,42 @@ class StreamerGUI:
         """Update the status bar message."""
         self.status_label.config(text=message)
 
+    def _restore_state(self) -> None:
+        """Restore UI state from saved preferences."""
+        # Restore show preview setting
+        self.preview_var.set(self._state.streamer_show_preview)
+
+        # Restore stream audio setting
+        self.stream_audio_var.set(self._state.streamer_audio_enabled)
+
+        # Restore last video file if it still exists
+        last_video = self._state.streamer_last_video
+        if last_video:
+            video_path = Path(last_video)
+            if video_path.exists():
+                self._video_path = video_path
+                self.file_var.set(str(self._video_path))
+                self.start_btn.state(["!disabled"])
+                self._update_status(f"Loaded: {self._video_path.name}")
+                log.info(f"Restored last video: {self._video_path}")
+
+                # Start preview if enabled
+                if self.preview_var.get():
+                    self._start_preview()
+
+    def _save_state(self) -> None:
+        """Save current UI state."""
+        self._state.streamer_show_preview = self.preview_var.get()
+        self._state.streamer_audio_enabled = self.stream_audio_var.get()
+        if self._video_path:
+            self._state.streamer_last_video = str(self._video_path)
+        self._state.save()
+
     def _on_close(self) -> None:
         """Handle window close event."""
+        # Save state before closing
+        self._save_state()
+
         # Stop streamer if running
         if self._streamer:
             self._streamer.stop()

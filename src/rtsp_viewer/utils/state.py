@@ -87,3 +87,34 @@ class AppState:
     def console_visible(self, visible: bool) -> None:
         """Set console visibility preference."""
         self.set("console_visible", visible)
+
+    # Streamer GUI settings
+    @property
+    def streamer_last_video(self) -> str | None:
+        """Get the last selected video file path for streamer."""
+        return self.get("streamer_last_video")
+
+    @streamer_last_video.setter
+    def streamer_last_video(self, path: str | None) -> None:
+        """Set the last selected video file path for streamer."""
+        self.set("streamer_last_video", path)
+
+    @property
+    def streamer_show_preview(self) -> bool:
+        """Get streamer preview preference."""
+        return self.get("streamer_show_preview", True)
+
+    @streamer_show_preview.setter
+    def streamer_show_preview(self, enabled: bool) -> None:
+        """Set streamer preview preference."""
+        self.set("streamer_show_preview", enabled)
+
+    @property
+    def streamer_audio_enabled(self) -> bool:
+        """Get streamer audio preference."""
+        return self.get("streamer_audio_enabled", True)
+
+    @streamer_audio_enabled.setter
+    def streamer_audio_enabled(self, enabled: bool) -> None:
+        """Set streamer audio preference."""
+        self.set("streamer_audio_enabled", enabled)
