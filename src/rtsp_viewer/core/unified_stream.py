@@ -139,7 +139,7 @@ class UnifiedStream:
             self._cap.release()
             self._cap = None
 
-        # Set FFmpeg options
+        # Set FFmpeg options for RTSP capture
         low_latency = self.camera.low_latency
         if low_latency:
             log.debug("Using low-latency mode")

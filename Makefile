@@ -1,4 +1,4 @@
-.PHONY: install dev lint format typecheck test clean run check help install-ffmpeg install-tkinter install-mediamtx install-system-deps simulate
+.PHONY: install dev lint format typecheck test clean run check help install-ffmpeg install-tkinter install-mediamtx install-gstreamer install-system-deps simulate simulate-gst simulator-gui
 
 # Detect OS
 UNAME_S := $(shell uname -s)
@@ -12,11 +12,14 @@ help:
 	@echo "  install-system-deps Install system dependencies (ffmpeg, tkinter)"
 	@echo "  install-ffmpeg      Install ffmpeg"
 	@echo "  install-tkinter     Install tkinter"
-	@echo "  install-mediamtx    Install mediamtx (for simulator)"
+	@echo "  install-mediamtx    Install mediamtx (for ffmpeg simulator)"
+	@echo "  install-gstreamer   Install GStreamer (for gst simulator)"
 	@echo ""
 	@echo "  run                 Run the application"
 	@echo "  check               Check system dependencies (ffmpeg, ffplay)"
-	@echo "  simulate            Run RTSP simulator (VIDEO=path required)"
+	@echo "  simulate            Run RTSP simulator with ffmpeg (VIDEO=path required)"
+	@echo "  simulate-gst        Run RTSP simulator with GStreamer (VIDEO=path required)"
+	@echo "  simulator-gui       Run RTSP simulator GUI"
 	@echo ""
 	@echo "  lint                Run linter (ruff)"
 	@echo "  format              Format code (ruff)"
@@ -78,6 +81,22 @@ else
 	@echo "  Download from: https://github.com/bluenviron/mediamtx/releases"
 endif
 
+# Install GStreamer (for gst simulator - recommended)
+install-gstreamer:
+ifeq ($(UNAME_S),Darwin)
+	@echo "Installing GStreamer system libraries via Homebrew..."
+	brew install gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-rtsp-server gobject-introspection
+	@echo "Installing PyGObject Python package..."
+	uv sync --extra gstreamer
+else
+	@echo "Warning: Automatic installation only supported on macOS."
+	@echo "Please install GStreamer manually:"
+	@echo "  Ubuntu/Debian: sudo apt install python3-gst-1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gir1.2-gst-rtsp-server-1.0"
+	@echo "  Fedora: sudo dnf install python3-gstreamer1 gstreamer1-plugins-base gstreamer1-plugins-good gstreamer1-plugins-bad-free gstreamer1-rtsp-server"
+	@echo "  Arch: sudo pacman -S gst-python gst-plugins-base gst-plugins-good gst-plugins-bad gst-rtsp-server"
+	@echo "Then run: uv sync --extra gstreamer"
+endif
+
 # Run the application
 run:
 	uv run python -m rtsp_viewer
@@ -86,7 +105,7 @@ run:
 check:
 	uv run python -m rtsp_viewer --check
 
-# Run the RTSP simulator (requires VIDEO=path/to/video.mp4)
+# Run the RTSP simulator with ffmpeg+mediamtx (requires VIDEO=path/to/video.mp4)
 simulate:
 ifndef VIDEO
 	@echo "Usage: make simulate VIDEO=path/to/video.mp4 [PORT=8554] [NAME=stream]"
@@ -96,6 +115,22 @@ ifndef VIDEO
 else
 	uv run rtsp-simulator $(VIDEO) $(if $(PORT),-p $(PORT)) $(if $(NAME),-n $(NAME))
 endif
+
+# Run the RTSP simulator with GStreamer (recommended - requires VIDEO=path/to/video.mp4)
+simulate-gst:
+ifndef VIDEO
+	@echo "Usage: make simulate-gst VIDEO=path/to/video.mp4 [PORT=8554] [NAME=stream] [LOOP=1]"
+	@echo ""
+	@echo "Example: make simulate-gst VIDEO=test.mp4"
+	@echo "         make simulate-gst VIDEO=test.mp4 PORT=8555 NAME=cam1"
+	@echo "         make simulate-gst VIDEO=test.mp4 LOOP=1"
+else
+	uv run rtsp-simulator-gst $(VIDEO) $(if $(PORT),-p $(PORT)) $(if $(NAME),-n $(NAME)) $(if $(LOOP),--loop)
+endif
+
+# Run the RTSP simulator GUI
+simulator-gui:
+	uv run rtsp-simulator-gui
 
 # Run linter
 lint:
