@@ -1,91 +1,101 @@
 # RTSP Stream Viewer
 
-A cross-platform RTSP stream viewer and recorder built with Python, OpenCV, and FFmpeg.
+A production-ready RTSP stream viewer and recorder built with Python, OpenCV, and FFmpeg. Includes an RTSP simulator for testing without real cameras.
 
 ## Features
 
-- **Live Streaming**: View RTSP camera feeds in real-time
-- **Recording**: Record streams to MP4 with original video quality
-- **Audio Playback**: Listen to camera audio (requires FFmpeg)
-- **Multi-Camera Support**: Configure multiple cameras via YAML
-- **Low-Latency Mode**: Optional optimizations for real-time monitoring
-- **Hot Reload**: Refresh camera configuration without restarting
+### Stream Viewing
+- **Real-time RTSP playback** via OpenCV with FFmpeg backend
+- **Synchronized audio** using FFplay with async resampling
+- **Low-latency mode** with buffer draining for security monitoring
+- **Auto-reconnect** with health monitoring (5 attempts, 2s delay, 10s timeout)
+- **Multi-camera support** with hot-swappable YAML configuration
+
+### Recording
+- **Lossless video capture** — direct stream copy, no re-encoding
+- **Crash-resistant** — fragmented MP4 preserves data on interruption
+- **30-minute segments** — automatic file rotation for reliability
+- **AAC audio** — transcoded to 128 kbps for broad compatibility
+
+### RTSP Simulator
+- **Test without cameras** — serve any video file as an RTSP stream
+- **Two backends** — GStreamer (recommended) or FFmpeg + mediamtx
+- **GUI and CLI** — visual interface or command-line control
+- **Looping support** — continuous playback for extended testing
+
+### User Interface
+- **Native Tkinter GUI** — cross-platform, no web dependencies
+- **Console panel** — built-in log viewer for debugging
+- **State persistence** — remembers window size, audio settings, last camera
+- **Open Simulator** — launch simulator directly from main viewer
+
+---
+
+## Quick Start
+
+```bash
+# Install dependencies
+make install-system-deps
+make install
+
+# Configure cameras
+cp cameras.yaml.example cameras.yaml  # Edit with your camera details
+
+# Run the viewer
+make run
+```
+
+---
 
 ## Requirements
 
-- Python 3.11+
-- FFmpeg (for audio playback and recording)
-- Tkinter (for GUI)
+| Dependency | Purpose | Install |
+|------------|---------|---------|
+| Python 3.11+ | Runtime | — |
+| FFmpeg | Audio playback, recording | `brew install ffmpeg` |
+| Tkinter | GUI framework | `brew install python-tk@3.13` |
+| GStreamer | Simulator (optional) | `make install-gstreamer` |
+| mediamtx | Simulator fallback (optional) | `make install-mediamtx` |
+
+---
 
 ## Installation
 
-### 1. Clone the repository
+### macOS (Homebrew)
 
 ```bash
-git clone https://github.com/yourusername/rtsp-viewer.git
-cd rtsp-viewer
-```
-
-### 2. Install system dependencies
-
-#### macOS (Homebrew)
-
-```bash
+# All system dependencies
 make install-system-deps
+
+# Python packages
+make install
 ```
 
-Or manually:
-
-```bash
-brew install ffmpeg
-brew install python-tk@3.13  # Match your Python version
-```
-
-#### Ubuntu/Debian
+### Ubuntu/Debian
 
 ```bash
 sudo apt update
 sudo apt install ffmpeg python3-tk
-```
 
-#### Fedora
+# For simulator
+sudo apt install python3-gst-1.0 gstreamer1.0-plugins-base \
+  gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+  gir1.2-gst-rtsp-server-1.0
 
-```bash
-sudo dnf install ffmpeg python3-tkinter
-```
-
-#### Arch Linux
-
-```bash
-sudo pacman -S ffmpeg tk
-```
-
-#### Windows
-
-```powershell
-choco install ffmpeg
-# Tkinter is included with the Python installer
-```
-
-### 3. Install Python dependencies
-
-```bash
-# Using uv (recommended)
 make install
-
-# Or with pip
-pip install -e .
 ```
 
-### 4. Verify installation
+### Verify Installation
 
 ```bash
 make check
 ```
 
+---
+
 ## Configuration
 
-Create or edit `cameras.yaml` in the project root:
+Create `cameras.yaml` in the project root:
 
 ```yaml
 cameras:
@@ -94,7 +104,7 @@ cameras:
     port: 554
     username: "admin"
     password: "password123"
-    path: "/stream1"
+    path: "/Streaming/Channels/101"
     low_latency: false
 
   - name: "Backyard"
@@ -102,193 +112,275 @@ cameras:
     port: 554
     username: "admin"
     password: "password123"
-    path: "/h264"
+    path: "/h264Preview_01_main"
     low_latency: true
 ```
 
 ### Configuration Options
 
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `name` | string | Yes | - | Display name for the camera |
-| `address` | string | Yes | - | IP address or hostname |
-| `port` | integer | No | 554 | RTSP port |
-| `username` | string | No | "" | Authentication username |
-| `password` | string | No | "" | Authentication password |
-| `path` | string | No | "" | RTSP stream path |
-| `low_latency` | boolean | No | false | Enable low-latency optimizations |
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | string | required | Display name for the camera |
+| `address` | string | required | IP address or hostname |
+| `port` | int | `554` | RTSP port |
+| `username` | string | `""` | Authentication username |
+| `password` | string | `""` | Authentication password |
+| `path` | string | `""` | RTSP stream path |
+| `low_latency` | bool | `false` | Enable buffer draining for real-time display |
 
-### Common RTSP Paths by Manufacturer
+### Common RTSP Paths
 
-| Manufacturer | Common Paths |
-|--------------|--------------|
+| Manufacturer | Path |
+|--------------|------|
 | Hikvision | `/Streaming/Channels/101` |
-| Dahua | `/cam/realmonitor?channel=1&subtype=0` |
-| Wyze | `/live` |
-| Amcrest | `/cam/realmonitor?channel=1&subtype=0` |
+| Dahua / Amcrest | `/cam/realmonitor?channel=1&subtype=0` |
 | Reolink | `/h264Preview_01_main` |
+| Wyze | `/live` |
 | Axis | `/axis-media/media.amp` |
-| Generic | `/stream1`, `/h264`, `/live`, `/video1` |
+| Generic | `/stream1`, `/h264`, `/live` |
+
+---
 
 ## Usage
 
-### Start the application
+### Viewer Application
 
 ```bash
+# Start the GUI
 make run
-```
 
-Or directly:
-
-```bash
-uv run python main.py
-```
-
-### Command-line options
-
-```bash
-uv run python main.py --help
-
-# Use a custom config file
-uv run python main.py -c /path/to/cameras.yaml
+# Or with custom config
+rtsp-viewer -c /path/to/cameras.yaml
 
 # Check dependencies only
-uv run python main.py --check
+rtsp-viewer --check
 ```
 
 ### Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
-| `Space` | Toggle play/pause |
-| `R` | Toggle recording |
-| `Escape` | Exit application |
+| `Space` | Play / Pause |
+| `R` | Start / Stop recording |
+| `Escape` | Exit |
 
 ### GUI Controls
 
-- **Play**: Start streaming from selected camera
-- **Pause**: Stop streaming
-- **Record**: Start recording to `recordings/` folder
-- **Stop Recording**: Stop and finalize recording
-- **Audio**: Toggle audio playback on/off
-- **Refresh Config**: Reload `cameras.yaml` without restarting
+| Button | Action |
+|--------|--------|
+| Play | Connect and stream from selected camera |
+| Pause | Disconnect from stream |
+| Record | Start recording to `recordings/` directory |
+| Audio | Toggle audio playback |
+| Refresh | Reload camera configuration |
+| Console | Show/hide log panel |
+| Simulator | Open RTSP simulator window |
+
+---
 
 ## Recording
 
-Recordings are saved to the `recordings/` directory with timestamped filenames:
+Recordings are organized in session directories:
 
 ```
 recordings/
-├── Front_Door_20231215_143052.mp4
-├── Front_Door_20231215_151230.mp4
-└── Backyard_20231215_160045.mp4
+└── Front_Door_20231215_143052/
+    ├── Front_Door_20231215_143052.mp4   # 0:00 - 0:30
+    ├── Front_Door_20231215_173052.mp4   # 0:30 - 1:00
+    └── Front_Door_20231215_203052.mp4   # 1:00 - 1:30
 ```
 
-### Recording Format
+### Recording Specifications
 
-- **Container**: MP4
-- **Video**: Original codec (no re-encoding)
-- **Audio**: AAC 128kbps (transcoded for compatibility)
-- **Optimization**: `faststart` flag for web streaming
+| Property | Value |
+|----------|-------|
+| Container | MP4 (fragmented) |
+| Video | Stream copy (original codec) |
+| Audio | AAC 128 kbps |
+| Segments | 30 minutes each |
+| Flags | `frag_keyframe+empty_moov+default_base_moof` |
+
+---
 
 ## Low-Latency Mode
 
-Enable `low_latency: true` in camera config for:
+Enable `low_latency: true` for real-time monitoring scenarios.
 
-- Reduced buffering
-- Frame dropping for real-time display
-- Faster stream startup
+| Behavior | Standard | Low-Latency |
+|----------|----------|-------------|
+| Buffer | 8 MB | None (`nobuffer`) |
+| Frame handling | Sequential read | Buffer drain (latest only) |
+| Typical latency | 1–3 seconds | < 500 ms |
+| Smoothness | Consistent | May skip frames |
 
-**Trade-offs**: May result in occasional frame skips. Best for security monitoring where real-time matters more than smoothness.
+**Best for:** Security monitoring, PTZ control, live events where delay matters more than smoothness.
+
+---
+
+## RTSP Simulator
+
+Test the viewer without real cameras by serving a video file as an RTSP stream.
+
+### GUI Mode
+
+```bash
+make simulator-gui
+```
+
+1. Browse and select a video file
+2. Choose backend (GStreamer recommended)
+3. Click Start
+4. Connect viewer to `rtsp://localhost:8554/stream`
+
+### CLI Mode
+
+```bash
+# GStreamer backend (recommended)
+make simulate-gst VIDEO=test.mp4
+
+# With options
+make simulate-gst VIDEO=test.mp4 PORT=8555 NAME=cam1 LOOP=1
+
+# FFmpeg + mediamtx fallback
+make simulate VIDEO=test.mp4
+```
+
+### Backend Comparison
+
+| Feature | GStreamer | FFmpeg + mediamtx |
+|---------|-----------|-------------------|
+| Stability | Better | Good |
+| Looping | Supported | Restarts file |
+| Setup | More packages | Two binaries |
+| Recommendation | **Primary** | Fallback |
+
+### Installing Simulator Dependencies
+
+```bash
+# GStreamer (recommended)
+make install-gstreamer
+
+# Or FFmpeg + mediamtx
+make install-mediamtx
+```
+
+---
+
+## Architecture
+
+### Unified Stream Design
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     UnifiedStream                       │
+├─────────────────────────────────────────────────────────┤
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │   OpenCV     │  │   FFplay     │  │   FFmpeg     │  │
+│  │  (display)   │  │   (audio)    │  │  (record)    │  │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  │
+│         └─────────────────┴─────────────────┘          │
+│                           │                             │
+│                    RTSP Stream (TCP)                    │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Thread Model
+
+| Thread | Purpose | Lifecycle |
+|--------|---------|-----------|
+| Main | Tkinter event loop | Application lifetime |
+| Capture | Frame reading (OpenCV) | While streaming |
+| Recording | FFmpeg process monitoring | While recording |
+
+### Key Modules
+
+```
+src/rtsp_viewer/
+├── cli.py                    # Entry point, argument parsing
+├── core/
+│   ├── config.py             # YAML camera configuration
+│   ├── unified_stream.py     # Video, audio, recording manager
+│   ├── viewer.py             # Multi-camera controller
+│   ├── simulator.py          # FFmpeg + mediamtx simulator
+│   └── gst_simulator.py      # GStreamer simulator
+├── ui/
+│   ├── gui.py                # Main viewer window
+│   └── simulator_gui.py      # Simulator control window
+└── utils/
+    ├── logger.py             # Logging with GUI handler
+    └── state.py              # Persistent settings
+```
+
+---
 
 ## Development
 
-### Setup development environment
+### Setup
 
 ```bash
-make dev
+make dev  # Install with dev dependencies
 ```
 
-### Available make targets
+### Commands
 
-```bash
-make help
-```
+| Command | Description |
+|---------|-------------|
+| `make run` | Start the application |
+| `make lint` | Run ruff linter |
+| `make format` | Format code with ruff |
+| `make typecheck` | Run mypy type checker |
+| `make clean` | Remove build artifacts |
 
-| Target | Description |
-|--------|-------------|
-| `install` | Install Python dependencies |
-| `dev` | Install development dependencies |
-| `install-system-deps` | Install FFmpeg and Tkinter (macOS) |
-| `run` | Run the application |
-| `check` | Verify system dependencies |
-| `lint` | Run ruff linter |
-| `format` | Format code with ruff |
-| `typecheck` | Run mypy type checker |
-| `clean` | Remove build artifacts |
+### CLI Entry Points
 
-### Project Structure
+| Command | Description |
+|---------|-------------|
+| `rtsp-viewer` | Main viewer application |
+| `rtsp-simulator` | FFmpeg simulator CLI |
+| `rtsp-simulator-gst` | GStreamer simulator CLI |
+| `rtsp-simulator-gui` | Simulator GUI |
 
-```
-rtsp-viewer/
-├── main.py          # Application entry point
-├── gui.py           # Tkinter GUI implementation
-├── viewer.py        # Main controller
-├── stream.py        # RTSP stream handler (OpenCV)
-├── audio.py         # Audio playback (FFplay)
-├── recorder.py      # Recording functionality (FFmpeg)
-├── config.py        # YAML configuration loader
-├── cameras.yaml     # Camera configuration
-├── Makefile         # Build automation
-├── pyproject.toml   # Python project configuration
-└── README.md        # This file
-```
+---
 
 ## Troubleshooting
 
 ### Stream won't connect
 
-1. Verify the RTSP URL works with VLC or ffplay:
-   ```bash
-   ffplay -rtsp_transport tcp "rtsp://user:pass@192.168.1.100:554/stream1"
-   ```
+```bash
+# Test with ffplay first
+ffplay -rtsp_transport tcp "rtsp://user:pass@192.168.1.100:554/stream1"
+```
 
-2. Check firewall settings on camera and network
-
-3. Try different RTSP paths (see manufacturer table above)
+- Check camera IP is reachable
+- Verify credentials and RTSP path
+- Try different paths from the manufacturer table
 
 ### No audio
 
-- Ensure FFmpeg/FFplay is installed: `which ffplay`
-- Some cameras don't have audio or require separate audio paths
-- Check the Audio checkbox is enabled
+- Confirm FFplay is installed: `which ffplay`
+- Some cameras don't have audio streams
+- Ensure Audio toggle is enabled in GUI
 
-### Recording creates 0-byte files
+### Recording issues
 
-- Camera audio codec may be incompatible (fixed in latest version)
-- Check FFmpeg is installed: `which ffmpeg`
-- Verify stream is actually playing before recording
+- 0-byte files: stream must be playing before recording starts
+- Choppy playback: files use fragmented MP4, some players struggle
 
 ### High CPU usage
 
-- Disable `low_latency` mode
-- Reduce window size (less scaling needed)
-- Close other camera streams
+- Disable low-latency mode
+- Reduce window size (less scaling)
+- Close unused camera streams
 
-### Ghosting/motion blur
-
-- This is often from the camera's encoding, not the viewer
-- Try enabling `low_latency: true` for buffer draining
-- Some cameras have "low latency" or "smooth" encoding options
+---
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT License — see LICENSE file for details.
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature-name`
-3. Make your changes
-4. Run linting: `make format && make lint`
-5. Submit a pull request
+3. Make changes and test: `make format && make lint`
+4. Submit a pull request
