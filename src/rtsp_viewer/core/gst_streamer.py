@@ -229,12 +229,13 @@ class LoopingGstRTSPStreamer(GstRTSPStreamer):
 
         # Use uridecodebin for flexible input and re-encode to H264
         # This gives consistent timing and allows seeking
+        # videorate ensures consistent framerate output
         uri = self.video_path.as_uri()
 
         if self.enable_audio:
             pipeline = (
                 f"( uridecodebin uri={uri} name=src "
-                f"src. ! queue ! videoconvert ! "
+                f"src. ! queue ! videoconvert ! videorate ! "
                 f"x264enc tune=zerolatency speed-preset=ultrafast ! "
                 f"rtph264pay name=pay0 pt=96 "
                 f"src. ! queue ! audioconvert ! voaacenc ! rtpmp4apay name=pay1 pt=97 )"
@@ -242,7 +243,7 @@ class LoopingGstRTSPStreamer(GstRTSPStreamer):
         else:
             pipeline = (
                 f"( uridecodebin uri={uri} name=src "
-                f"src. ! queue ! videoconvert ! "
+                f"src. ! queue ! videoconvert ! videorate ! "
                 f"x264enc tune=zerolatency speed-preset=ultrafast ! "
                 f"rtph264pay name=pay0 pt=96 )"
             )
